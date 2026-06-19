@@ -1,4 +1,4 @@
-"""Metadata-grounded narrative generation for PiedPiper match explanations.
+"""Metadata-grounded narrative generation for Dundo match explanations.
 
 This module is intentionally independent from FastAPI. `api.py` supplies a
 trusted `NarrativeContext`; this module gates context quality, builds a
@@ -77,7 +77,7 @@ NarrativeResult = NarrativeResponse | LowConfidence | NarrativeUnavailable
 
 SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
     "whySimilar": (
-        "You are PiedPiper, an expert assistant explaining acoustic similarity "
+        "You are Dundo, an expert assistant explaining acoustic similarity "
         "between music tracks. You receive structured metadata about two audio "
         "segments. You do not hear the audio. You do not determine copyright "
         "infringement, ownership, or legal status. Cite only tracks, criteria, "
@@ -85,7 +85,7 @@ SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
         "matching the schema. No additional text, no markdown."
     ),
     "creatorAdvice": (
-        "You are PiedPiper, an expert assistant helping creators make a music "
+        "You are Dundo, an expert assistant helping creators make a music "
         "generation more distinctive from a retrieved catalog match. You receive "
         "structured metadata about two audio segments. You do not hear the audio. "
         "You do not determine copyright infringement, ownership, or legal status. "

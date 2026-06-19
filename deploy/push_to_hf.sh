@@ -13,8 +13,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STAGING_DIR="$(dirname "$REPO_ROOT")/piedpiper-hf-fresh"
-SPACE_NAME="rajata98/piedpiper"
+STAGING_DIR="$(dirname "$REPO_ROOT")/dundo-hf-fresh"
+SPACE_NAME="rajata98/dundo"
 
 if [ ! -r "$HOME/.cache/huggingface/token" ]; then
   echo "[push] ERROR: ~/.cache/huggingface/token not readable." >&2
@@ -77,5 +77,5 @@ echo "[push] Done. Watch build progress at:"
 echo "       https://huggingface.co/spaces/${SPACE_NAME}/logs"
 echo ""
 echo "       When build finishes, smoke test:"
-echo "         curl -sS https://rajata98-piedpiper.hf.space/narrative/stats"
+echo "         curl -sS https://rajata98-dundo.hf.space/narrative/stats"
 echo "       Expected: {\"total_calls\": 0, ...}"

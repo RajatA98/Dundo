@@ -63,7 +63,7 @@ _KNOWN_ERROR_CODES = {
     "narrative-error",
 }
 
-_logger = logging.getLogger("piedpiper.narrative")
+_logger = logging.getLogger("dundo.narrative")
 _logger.setLevel(logging.INFO)
 # Don't add handlers here — the FastAPI app's uvicorn config already streams
 # stdlib logging to stdout, which is the HF Space's log-collection surface.

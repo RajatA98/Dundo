@@ -1,5 +1,5 @@
 ---
-title: PiedPiper
+title: Dundo
 emoji: 🎵
 colorFrom: green
 colorTo: gray
@@ -9,7 +9,7 @@ pinned: false
 license: mit
 ---
 
-# PiedPiper API
+# Dundo API
 
 FastAPI service that takes an AI-generated music track, encodes it to a 512-d
 LAION-CLAP music-tuned audio embedding (10s windowed, L2-normalized mean pool),
@@ -70,7 +70,7 @@ as a known limitation.
 ## Cold start
 
 Free CPU Basic Spaces sleep after ~48 h idle and take ~30 s to wake on the first
-request. The PiedPiper frontend handles this with a "warming up the analyzer" UI
+request. The Dundo frontend handles this with a "warming up the analyzer" UI
 state when a request exceeds 6 s. An UptimeRobot ping on `/health` every 5 minutes
 keeps the Space warm during the demo window — setup is documented in the top-level
 repo README.

@@ -2,7 +2,7 @@
 //
 // `VITE_API_URL` bakes into the bundle at build time:
 //   - Dev (.env.local):       http://localhost:8000
-//   - Prod (.env.production): https://<your-hf-username>-piedpiper.hf.space
+//   - Prod (.env.production): https://<your-hf-username>-dundo.hf.space
 //
 // If unset, falls back to relative `/analyze` (same-origin) — useful for the
 // all-in-one HF Space deploy where the static site is served by the API host.

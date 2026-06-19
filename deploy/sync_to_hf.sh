@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# Sync the PiedPiper repo into the staging shape the HF Space Dockerfile expects.
+# Sync the Dundo repo into the staging shape the HF Space Dockerfile expects.
 #
 # Why this exists: the Hugging Face Space repo has its own git remote and expects
 # a flat layout — Dockerfile + README.md + app.py + requirements.txt + backend/ +
-# corpus/ + eval_audio/, all at the repo root. The PiedPiper monorepo nests these
+# corpus/ + eval_audio/, all at the repo root. The Dundo monorepo nests these
 # files under `deploy/hf_space/`, `backend/backend/`, and `quality-scorer/public/`,
 # so we sync them into a staging directory which the user then pushes to the Space.
 #
 # Usage:
 #   bash deploy/sync_to_hf.sh [STAGING_DIR]
 #
-# Default STAGING_DIR is ../piedpiper-hf-space (sibling of the repo).
+# Default STAGING_DIR is ../dundo-hf-space (sibling of the repo).
 #
 # After running:
-#   cd ../piedpiper-hf-space
-#   git init && git remote add origin https://huggingface.co/spaces/<user>/piedpiper
+#   cd ../dundo-hf-space
+#   git init && git remote add origin https://huggingface.co/spaces/<user>/dundo
 #   git add . && git commit -m "Initial Space build"
 #   git push -u origin main
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STAGING_DIR="${1:-${REPO_ROOT}/../piedpiper-hf-space}"
+STAGING_DIR="${1:-${REPO_ROOT}/../dundo-hf-space}"
 
 echo "[sync] repo:    $REPO_ROOT"
 echo "[sync] staging: $STAGING_DIR"
@@ -41,7 +41,7 @@ cp "$REPO_ROOT/deploy/hf_space/README.md"         "$STAGING_DIR/README.md"
 cp "$REPO_ROOT/deploy/hf_space/app.py"            "$STAGING_DIR/app.py"
 cp "$REPO_ROOT/deploy/hf_space/requirements.txt"  "$STAGING_DIR/requirements.txt"
 
-# Backend Python package — flatten one level. The PiedPiper repo has
+# Backend Python package — flatten one level. The Dundo repo has
 # `backend/backend/api.py`; the Space expects `/app/backend/api.py` after
 # `COPY backend /app/backend`, so the inner package directory is what we ship.
 rm -rf "$STAGING_DIR/backend"
@@ -91,8 +91,8 @@ echo ""
 echo "[sync] Next steps:"
 echo "  1. cd $STAGING_DIR"
 echo "  2. git init && git lfs install (if not already)"
-echo "  3. git remote add origin https://huggingface.co/spaces/<your-user>/piedpiper"
-echo "  4. git add . && git commit -m 'Initial PiedPiper Space build'"
+echo "  3. git remote add origin https://huggingface.co/spaces/<your-user>/dundo"
+echo "  4. git add . && git commit -m 'Initial Dundo Space build'"
 echo "  5. git push -u origin main"
 echo ""
 echo "  Then in the Space settings, add the ACRCloud secrets + CORS_ORIGIN."

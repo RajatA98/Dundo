@@ -1,4 +1,4 @@
-# PiedPiper — Project Overview
+# Dundo — Project Overview
 
 **A content-based music similarity scanner targeting AI-generated tracks. Live, public, single-developer build.**
 
@@ -16,19 +16,19 @@ Two independent secondary signals sit on the same report card:
 
 A separate `/evaluation` page reports measured retrieval quality: Recall@1, Recall@3, MRR, top-1 cosine distribution on unrelated negatives, latency percentiles, and a named-examples section (currently empty, scaffolded for Option B Suno-curated examples).
 
-**Live demo**: https://piedpiper-xi.vercel.app
-**Backend**: https://rajata98-piedpiper.hf.space (FastAPI on HF Spaces CPU Basic, free tier)
-**Source**: https://github.com/RajatA98/PiedPiper
+**Live demo**: https://dundo-xi.vercel.app
+**Backend**: https://rajata98-dundo.hf.space (FastAPI on HF Spaces CPU Basic, free tier)
+**Source**: https://github.com/RajatA98/Dundo
 
 ---
 
 ## 2. Why it exists
 
-**Honest framing**: PiedPiper is a job-hunt artifact aimed at a warm-intro pitch to Suno's Head of Engineering. The technical premise is sincere — content-based music retrieval against an AI generation is a real and tractable problem — but the build was scoped to demonstrate engineering judgment, not to ship a consumer product.
+**Honest framing**: Dundo is a job-hunt artifact aimed at a warm-intro pitch to Suno's Head of Engineering. The technical premise is sincere — content-based music retrieval against an AI generation is a real and tractable problem — but the build was scoped to demonstrate engineering judgment, not to ship a consumer product.
 
-The name is a nod to Silicon Valley (the HBO show). In the pilot episode, Richard Hendricks pitches Pied Piper as a tool for songwriters to search whether their melody resembles anything that's come before. Investors laugh, the show pivots to compression. PiedPiper-the-project is Richard's original pitch, ten years later, applied to AI-generated music. The engineering is straight; the framing is a wink.
+The name is a nod to Silicon Valley (the HBO show). In the pilot episode, Richard Hendricks pitches Pied Piper as a tool for songwriters to search whether their melody resembles anything that's come before. Investors laugh, the show pivots to compression. Dundo-the-project is Richard's original pitch, ten years later, applied to AI-generated music. The engineering is straight; the framing is a wink.
 
-**Strategic motivation**: Suno was sued by the RIAA in 2024 over training-data concerns. Even setting aside the legal outcome, Suno almost certainly needs an internal "originality check" — every generation passing through an embedder, ANN-searched against a reference catalog, flagged when too close to existing copyrighted material. PiedPiper is the prototype of that internal feature. The warm-intro pitch leverages this mapping.
+**Strategic motivation**: Suno was sued by the RIAA in 2024 over training-data concerns. Even setting aside the legal outcome, Suno almost certainly needs an internal "originality check" — every generation passing through an embedder, ANN-searched against a reference catalog, flagged when too close to existing copyrighted material. Dundo is the prototype of that internal feature. The warm-intro pitch leverages this mapping.
 
 ---
 
@@ -100,7 +100,7 @@ This is the part that determines retrieval quality, so it's documented carefully
 
 ## 6. Evaluation
 
-The hard claim of any retrieval system is "what's the recall?" PiedPiper ships a real eval, not a confusion matrix.
+The hard claim of any retrieval system is "what's the recall?" Dundo ships a real eval, not a confusion matrix.
 
 **Methodology**: Leave-one-out (LOO) over the live 160-track catalog. For each track, the track is held out of the index; the remaining 159 are queried using the held-out track's CLAP embedding; the held-out track's rank in the returned top-K is recorded. This is a catalog **retrieval check**, NOT an end-to-end AI-soundalike test — the methodology paragraph names this trade-off explicitly.
 
@@ -138,9 +138,9 @@ Diagnosis:
 
 | Component | State |
 |---|---|
-| GitHub repo (public) | Live: https://github.com/RajatA98/PiedPiper |
+| GitHub repo (public) | Live: https://github.com/RajatA98/Dundo |
 | HF Space backend | Live, `/health` returns corpus:160, segments:3495 |
-| Vercel frontend | Live: https://piedpiper-xi.vercel.app |
+| Vercel frontend | Live: https://dundo-xi.vercel.app |
 | CORS wiring (CORS_ORIGIN → Vercel URL) | Confirmed via preflight test |
 | GitHub → Vercel auto-deploys | Wired and verified |
 | Sentry stubs (backend + frontend) | In code, gated on DSN env vars (currently no-op) |
@@ -183,7 +183,7 @@ These are the things I'm actively weighing or have explicitly not decided:
 ## 11. What this project is NOT
 
 - **Not RAG.** No LLM in the loop, no generation step. Pure vector retrieval / semantic search. The output IS the search results, returned as JSON.
-- **Not a Shazam clone.** Shazam does exact-fingerprint matching against ~30M licensed commercial tracks. PiedPiper does semantic similarity against 160 tracks and is bounded by what a solo developer can legitimately license (i.e., not much).
+- **Not a Shazam clone.** Shazam does exact-fingerprint matching against ~30M licensed commercial tracks. Dundo does semantic similarity against 160 tracks and is bounded by what a solo developer can legitimately license (i.e., not much).
 - **Not production-grade.** $0 hosting, no SLA, free tier, single CPU. Cold-start is ~30 seconds; warm response is sub-second.
 - **Not generative.** It does not create music. It only finds existing reference music similar to an upload.
 

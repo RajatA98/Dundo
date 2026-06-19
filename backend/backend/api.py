@@ -166,7 +166,7 @@ async def lifespan(_app):
     yield
 
 
-app = FastAPI(title="PiedPiper", version=__version__, lifespan=lifespan)
+app = FastAPI(title="Dundo", version=__version__, lifespan=lifespan)
 
 _CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:5173")
 app.add_middleware(

@@ -1,4 +1,4 @@
-"""Run the PiedPiper eval against the golden set and write eval.json.
+"""Run the Dundo eval against the golden set and write eval.json.
 
 Phase 6 entry point. Reads:
   - `backend/eval_input/golden_set.json` (built by build_golden_set.py)

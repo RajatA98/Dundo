@@ -1,4 +1,4 @@
-# PiedPiper — Hugging Face Space (Docker SDK).
+# Dundo — Hugging Face Space (Docker SDK).
 #
 # Build target: free CPU Basic Space (16 GB RAM / 2 vCPU). The CLAP checkpoint
 # is pre-pulled at build time so the first request after a cold wake isn't ~30 s.

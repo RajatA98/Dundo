@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "piedpiper-backend"
+name = "dundo-backend"
 version = "0.1.0"
-description = "PiedPiper — acoustic-similarity scanner for AI-generated music."
+description = "Dundo — acoustic-similarity scanner for AI-generated music."
 requires-python = ">=3.11"
 dependencies = []
 

@@ -33,7 +33,7 @@ export default function AboutPage() {
         style={{ color: 'var(--color-dim)' }}
       >
         <p>
-          PiedPiper embeds each track with an open-source audio model
+          Dundo embeds each track with an open-source audio model
           (MuQ-MuLan, 512-d music-text joint embedding at 24 kHz), then runs
           nearest-neighbour search against a hand-curated reference catalog of
           roughly{' '}

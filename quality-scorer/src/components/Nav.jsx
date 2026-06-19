@@ -4,8 +4,9 @@ import { NavLink, useLocation } from 'react-router-dom'
  * Top nav — feather glyph + lowercase wordmark + three nav links.
  *
  * Visual contract: ui_mockup_v2_suno_flare.html `<nav class="topbar">`.
- * Wordmark is "pied piper" (lowercase, Outfit) per the Pied Piper visual
- * identity rules in CLAUDE_UI_DESIGN_PROMPT.md.
+ * Wordmark is "dundo" (lowercase, Outfit) per the Dundo visual
+ * identity rules (inherited from PiedPiper's CLAUDE_UI_DESIGN_PROMPT.md
+ * which lives at factory/artifacts/_PREPIVOT/).
  */
 export default function Nav() {
   const { pathname } = useLocation()
@@ -18,7 +19,7 @@ export default function Nav() {
     >
       <div className="mx-auto flex h-[72px] max-w-[1120px] items-center justify-between px-10">
         <NavLink to="/" className="flex select-none items-center gap-2.5">
-          {/* Two-tone schematic feather glyph — Pied Piper 4.0 mark. */}
+          {/* Two-tone schematic feather glyph — Dundo brand mark (carried from PiedPiper). */}
           <svg width="22" height="24" viewBox="0 0 22 24" fill="none" aria-hidden="true">
             <line x1="6" y1="22" x2="16.5" y2="3" stroke="var(--color-ink)" strokeWidth="1.6" strokeLinecap="round" />
             <line x1="11" y1="13" x2="6" y2="11.5" stroke="var(--color-accent)" strokeWidth="1.6" strokeLinecap="round" />
@@ -37,7 +38,7 @@ export default function Nav() {
               lineHeight: 1,
             }}
           >
-            pied piper
+            dundo
           </span>
         </NavLink>
 

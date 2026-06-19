@@ -180,7 +180,7 @@ def test_measure_call_records_on_exception():
 def test_structured_log_line_emitted(caplog):
     """The INFO log line contains stable key=value fields so HF Space logs
     are grep-able without a parser."""
-    with caplog.at_level(logging.INFO, logger="piedpiper.narrative"):
+    with caplog.at_level(logging.INFO, logger="dundo.narrative"):
         narrative_telemetry.record_call(
             mode="whySimilar",
             latency_ms=42.0,

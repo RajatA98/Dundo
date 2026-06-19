@@ -1,4 +1,4 @@
-"""Rebuild the PiedPiper reference catalog from scratch.
+"""Rebuild the Dundo reference catalog from scratch.
 
 Phase 1 entry point. Reads `backend/catalog.yaml`, hits iTunes Search + the
 chosen Tier-2 source(s), runs windowed CLAP encoding on every track, and
@@ -333,7 +333,7 @@ def _resolve_model_sha() -> str:
     cached model snapshot's commit hash if no pin is configured. This is what
     gets written into manifest.json so re-runs are auditable.
     """
-    env = os.getenv("PIEDPIPER_CLAP_REVISION")
+    env = os.getenv("DUNDO_CLAP_REVISION") or os.getenv("PIEDPIPER_CLAP_REVISION")
     if env:
         return env
     const = getattr(config, "CLAP_REVISION_SHA", None)

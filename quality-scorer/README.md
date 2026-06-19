@@ -1,4 +1,4 @@
-# PiedPiper — frontend
+# Dundo — frontend
 
 React + Vite + Tailwind v4 — the upload flow, ReportCard (similarity-first), and `/evaluation` page.
 

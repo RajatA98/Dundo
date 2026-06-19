@@ -1,10 +1,10 @@
-# PiedPiper
+# Dundo
 
 > *A creator-feedback layer for AI-generated music. Every generation passes through an originality check before it ships.*
 
-**[Live demo →](https://piedpiper-xi.vercel.app)** &nbsp;·&nbsp; **[Backend →](https://rajata98-piedpiper.hf.space/health)** &nbsp;·&nbsp; **[Decision record →](docs/decisions/0001-similarity-calibration.md)**
+**[Live demo →](https://dundo-xi.vercel.app)** &nbsp;·&nbsp; **[Backend →](https://rajata98-dundo.hf.space/health)** &nbsp;·&nbsp; **[Decision record →](docs/decisions/0001-similarity-calibration.md)**
 
-PiedPiper is a deployed web app that gives creators real-time feedback on how their AI-generated music compares to existing reference tracks. Upload a Suno or Udio generation; PiedPiper encodes it with a music-tuned audio embedder, retrieves the top-3 closest neighbors from a hand-curated catalog, calibrates the similarity scores against the catalog's own pairwise-cosine distribution, and surfaces:
+Dundo is a deployed web app that gives creators real-time feedback on how their AI-generated music compares to existing reference tracks. Upload a Suno or Udio generation; Dundo encodes it with a music-tuned audio embedder, retrieves the top-3 closest neighbors from a hand-curated catalog, calibrates the similarity scores against the catalog's own pairwise-cosine distribution, and surfaces:
 
 - A **calibrated match score** as a percentile rank with a coarse label (`very close` / `close` / `moderate` / `weak`) — not a raw cosine percentage, because raw cosine misleads on contrastive-trained encoders (see [ADR-0001](docs/decisions/0001-similarity-calibration.md)).
 - **Audio previews + album art** for every match so the creator can hear the comparison, not just read it.
@@ -12,9 +12,9 @@ PiedPiper is a deployed web app that gives creators real-time feedback on how th
 - Two independent **ACRCloud signals** as adjacent rows on the same report: a **Cover Song ID** check (does this resemble a known composition?) and an **AI Music Detector** verdict (is this AI-generated, and probabilistically from which engine?).
 - An inline **track-quality status badge** from the inherited 7-signal librosa pipeline.
 
-The intended product surface inside an AI music platform: this same pipeline runs on every generation before it reaches the creator. If the top match is too close, the creator gets actionable feedback — *"this generation scored close to track X. Try these prompt tweaks to push it toward more originality."* PiedPiper-the-portfolio-piece prototypes that loop end-to-end.
+The intended product surface inside an AI music platform: this same pipeline runs on every generation before it reaches the creator. If the top match is too close, the creator gets actionable feedback — *"this generation scored close to track X. Try these prompt tweaks to push it toward more originality."* Dundo-the-portfolio-piece prototypes that loop end-to-end.
 
-A separate [`/evaluation`](https://piedpiper-xi.vercel.app/evaluation) page reports measured retrieval quality on the catalog: **`Recall@1=0.639`, `Recall@3=0.735`, `MRR=0.692`**, latency `p50=0.27 ms`, and a top-1 cosine distribution. These are the post-ADR-0002 numbers after swapping LAION-CLAP for MuQ-MuLan; the LAION-CLAP baseline numbers (R@1=0.394 / R@3=0.494 / MRR=0.458) are preserved in [ADR-0002](docs/decisions/0002-swap-clap-for-muq-mulan.md) so the swap's empirical justification stays auditable. Leave-one-out methodology — honest about what it tests and what it doesn't.
+A separate [`/evaluation`](https://dundo-xi.vercel.app/evaluation) page reports measured retrieval quality on the catalog: **`Recall@1=0.639`, `Recall@3=0.735`, `MRR=0.692`**, latency `p50=0.27 ms`, and a top-1 cosine distribution. These are the post-ADR-0002 numbers after swapping LAION-CLAP for MuQ-MuLan; the LAION-CLAP baseline numbers (R@1=0.394 / R@3=0.494 / MRR=0.458) are preserved in [ADR-0002](docs/decisions/0002-swap-clap-for-muq-mulan.md) so the swap's empirical justification stays auditable. Leave-one-out methodology — honest about what it tests and what it doesn't.
 
 ## Key engineering decision: the CLAP → MuQ-MuLan swap
 
@@ -26,7 +26,7 @@ The deployed system originally ran LAION-CLAP. The live demo surfaced a real fai
 
 ## RAG-style evidence layer for AI-generated music
 
-PiedPiper is a **RAG-style evidence layer for AI-generated music**: MuQ-MuLan retrieves nearest catalog tracks, MIR metadata (tempo / key / harmonic / timbre, per ADR-0004) grounds the explanation, and an LLM narrates the evidence. The retrieval-and-explanation pipeline maps onto the [Gauntlet-AIDP rag-cookbook](https://github.com/Gauntlet-AIDP/rag-cookbook) ladder honestly: **Rung 1 (Naive RAG)** for retrieval + **metadata-grounded generation at presentation time** for the explanation. The cookbook's central rule is "refuse to climb without measured evidence," and this project respects it — no Hybrid (no text query), no Graph (no measured benefit), no Agentic (premature). See [ADR-0005](docs/decisions/0005-rag-narrative-and-visual-match.md) for the full rung-position argument.
+Dundo is a **RAG-style evidence layer for AI-generated music**: MuQ-MuLan retrieves nearest catalog tracks, MIR metadata (tempo / key / harmonic / timbre, per ADR-0004) grounds the explanation, and an LLM narrates the evidence. The retrieval-and-explanation pipeline maps onto the [Gauntlet-AIDP rag-cookbook](https://github.com/Gauntlet-AIDP/rag-cookbook) ladder honestly: **Rung 1 (Naive RAG)** for retrieval + **metadata-grounded generation at presentation time** for the explanation. The cookbook's central rule is "refuse to climb without measured evidence," and this project respects it — no Hybrid (no text query), no Graph (no measured benefit), no Agentic (premature). See [ADR-0005](docs/decisions/0005-rag-narrative-and-visual-match.md) for the full rung-position argument.
 
 Three tabs land inside the existing row-expansion panel:
 
@@ -42,7 +42,7 @@ Three tabs land inside the existing row-expansion panel:
 
 ## A small note on the name
 
-In the *Silicon Valley* pilot ("Minimum Viable Product"), Richard Hendricks first pitches Pied Piper as a music app — a tool for songwriters and composers to search whether their melody resembles anything that's come before. The investors laugh him out of the room and the show pivots Pied Piper to a compression algorithm. **PiedPiper-the-project is Richard's original pitch, ten years later, applied to AI-generated music.** The engineering is straight; the framing is a wink.
+In the *Silicon Valley* pilot ("Minimum Viable Product"), Richard Hendricks first pitches Pied Piper as a music app — a tool for songwriters and composers to search whether their melody resembles anything that's come before. The investors laugh him out of the room and the show pivots Pied Piper to a compression algorithm. **Dundo-the-project is Richard's original pitch, ten years later, applied to AI-generated music.** The engineering is straight; the framing is a wink.
 
 ## Architecture
 
@@ -187,12 +187,12 @@ the demo workload.
 ```bash
 # One-time: sync the repo into the flat layout the Space Dockerfile expects.
 bash deploy/sync_to_hf.sh
-# Default staging dir is ../piedpiper-hf-space — pass an arg to override.
+# Default staging dir is ../dundo-hf-space — pass an arg to override.
 
-cd ../piedpiper-hf-space
+cd ../dundo-hf-space
 git init && git lfs install
-git remote add origin https://huggingface.co/spaces/<your-user>/piedpiper
-git add . && git commit -m "Initial PiedPiper Space build"
+git remote add origin https://huggingface.co/spaces/<your-user>/dundo
+git add . && git commit -m "Initial Dundo Space build"
 git push -u origin main
 ```
 
@@ -212,14 +212,14 @@ Then in the Space's **Settings → Variables and secrets**:
 - `OPENAI_MODEL_ID` (optional variable) — defaults to `gpt-4o-mini`.
 
 First build takes ~8 min (pulls torch + MuQ weights). After it boots, hit
-`https://<your-user>-piedpiper.hf.space/health` — should return `{"ok": true, "corpus": 160, ...}`.
+`https://<your-user>-dundo.hf.space/health` — should return `{"ok": true, "corpus": 160, ...}`.
 
 ### 2. Frontend — Vercel
 
 1. Push this repo to GitHub.
-2. In Vercel, **New Project → Import Git Repository** → pick the PiedPiper repo.
+2. In Vercel, **New Project → Import Git Repository** → pick the Dundo repo.
 3. Root directory: `quality-scorer/`. Framework preset auto-detects Vite.
-4. Environment variable: `VITE_API_URL` = `https://<your-user>-piedpiper.hf.space`.
+4. Environment variable: `VITE_API_URL` = `https://<your-user>-dundo.hf.space`.
 5. Deploy. The first build runs `npm ci && npm run build`; the prod URL appears on the dashboard.
 6. Back in the Space, update `CORS_ORIGIN` to the Vercel URL and restart the Space.
 
@@ -233,7 +233,7 @@ Free CPU Basic Spaces sleep after ~48 hours idle and cold-start at ~30 s. During
 the demo window:
 
 1. Sign up at [uptimerobot.com](https://uptimerobot.com) (free tier covers 50 monitors).
-2. **Add New Monitor** → Type: HTTP(s) → URL: `https://<your-user>-piedpiper.hf.space/health` → Interval: 5 min.
+2. **Add New Monitor** → Type: HTTP(s) → URL: `https://<your-user>-dundo.hf.space/health` → Interval: 5 min.
 3. Optional: enable an alert email for status changes so a deploy regression pages you.
 
 The frontend's "warming up the analyzer" UI absorbs the cold start gracefully if

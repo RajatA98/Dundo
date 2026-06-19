@@ -1,4 +1,4 @@
-"""Self-retrieval verification for the PiedPiper matching pipeline.
+"""Self-retrieval verification for the Dundo matching pipeline.
 
 For each iTunes Tier-1 track in the catalog: download the actual Apple
 preview audio that was used to build the catalog embedding, POST it back
@@ -35,7 +35,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CORPUS = REPO_ROOT / "quality-scorer" / "public" / "corpus" / "corpus.json"
-DEFAULT_BASE_URL = "https://rajata98-piedpiper.hf.space"
+DEFAULT_BASE_URL = "https://rajata98-dundo.hf.space"
 APPLE_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
 
