@@ -37,7 +37,7 @@ from backend import config
 from backend import clap_windowed
 
 from . import _corpus_writer as cw
-from . import _fma_loader, _itunes_client, _jamendo_loader
+from . import _fma_loader, _jamendo_loader
 
 # This file lives at <repo>/backend/backend/scripts/rebuild_corpus.py
 # parents[0]=scripts/, [1]=backend/ (package), [2]=backend/ (project), [3]=<repo>
@@ -88,75 +88,26 @@ def main() -> None:
 
 
 def ingest_tier1(tier1_entries: list[dict]) -> list[cw.CorpusTrack]:
-    """Look up each entry on iTunes, fetch preview, run windowed CLAP encode.
+    """Retired in the Dundo pivot.
 
-    Apple compliance: the preview bytes are held in memory only for the duration
-    of the encode; nothing audio-shaped is ever persisted.
+    PiedPiper's Tier-1 ingest hit Apple's iTunes Search API for previews of
+    recognizable mainstream tracks. Dundo's thesis is CC-licensed indie
+    discovery, so Tier-1 is gone. The catalog.yaml `tier1:` section is
+    ignored; any tier1 entries pass through this no-op and don't reach the
+    corpus.
 
-    Args:
-        tier1_entries: list of {title, artist, expected_genre?} dicts from catalog.yaml.
-
-    Returns:
-        List of CorpusTrack with `mean_pooled` and `segment_embeddings` populated.
-        Entries that iTunes returns no results for are skipped with a log line.
+    Kept as a function (rather than removed entirely) so existing callers
+    + tests continue to work and the corpus stats keep a `tier1=0` line in
+    the rebuild log. See factory/artifacts/ACRCLOUD_RETIREMENT_NOTE.md for
+    the parallel rationale on ACRCloud removal.
     """
-    tracks: list[cw.CorpusTrack] = []
-    iterator = _itunes_client.rate_limited_iterator(tier1_entries)
-    for entry in tqdm(iterator, total=len(tier1_entries), desc="tier1 iTunes"):
-        title = str(entry.get("title", "")).strip()
-        artist = str(entry.get("artist", "")).strip()
-        if not title or not artist:
-            print(f"[tier1] skip malformed entry: {entry}", file=sys.stderr)
-            continue
-
-        try:
-            itunes = _itunes_client.search_track(title, artist)
-        except Exception as e:
-            print(f"[tier1] search failed: {title} by {artist}: {e}", file=sys.stderr)
-            continue
-        if itunes is None:
-            print(f"[tier1] skip: {title} by {artist}", file=sys.stderr)
-            continue
-
-        try:
-            try:
-                audio_bytes = _itunes_client.fetch_preview(itunes.preview_url)
-            except Exception:
-                time.sleep(2)
-                audio_bytes = _itunes_client.fetch_preview(itunes.preview_url)
-            wav_mono, sr = _decode_to_mono(audio_bytes)
-            mean_pooled, segs = clap_windowed.encode_windowed(wav_mono, sr, max_seconds=None)
-        except Exception as e:
-            print(f"[tier1] preview/encode failed: {title} by {artist}: {e}", file=sys.stderr)
-            continue
-
-        tracks.append(
-            cw.CorpusTrack(
-                track_id=f"tier1:itunes:{itunes.track_id}",
-                tier="tier1",
-                title=itunes.track_name,
-                artist=itunes.artist_name,
-                primary_genre=itunes.primary_genre_name or entry.get("expected_genre"),
-                source="itunes",
-                source_url=itunes.track_view_url,
-                track_view_url=itunes.track_view_url,
-                attribution_required=True,
-                license_short="Apple iTunes preview (promotional, attribution required)",
-                artwork_url=itunes.artwork_url_100,
-                duration_ms=itunes.track_time_millis,
-                external_ids={
-                    "itunesTrackId": itunes.track_id,
-                    "itunesArtistId": itunes.artist_id,
-                    "itunesCollectionId": itunes.collection_id,
-                    "previewUrl": itunes.preview_url,
-                    "releaseDate": itunes.release_date,
-                    "collectionName": itunes.collection_name,
-                },
-                mean_pooled=mean_pooled,
-                segment_embeddings=segs,
-            )
+    if tier1_entries:
+        print(
+            f"[tier1] {len(tier1_entries)} entries in catalog.yaml — ignored "
+            "(Tier-1 retired in Dundo pivot; CC-licensed catalog only).",
+            file=sys.stderr,
         )
-    return tracks
+    return []
 
 
 def ingest_tier2(tier2_config: dict) -> list[cw.CorpusTrack]:

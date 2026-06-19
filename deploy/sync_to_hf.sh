@@ -95,4 +95,4 @@ echo "  3. git remote add origin https://huggingface.co/spaces/<your-user>/dundo
 echo "  4. git add . && git commit -m 'Initial Dundo Space build'"
 echo "  5. git push -u origin main"
 echo ""
-echo "  Then in the Space settings, add the ACRCloud secrets + CORS_ORIGIN."
+echo "  Then in the Space settings, add OPENAI_API_KEY + CONTEXT_TOKEN_HMAC_KEY + CORS_ORIGIN."

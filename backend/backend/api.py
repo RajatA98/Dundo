@@ -40,7 +40,7 @@ from pydantic import BaseModel, Field
 # place via clap_windowed's swap. We still import clap_engine here only because
 # legacy code paths may reference it; the encoder load + genre tagging both go
 # through muq_engine.
-from . import __version__, acrcloud_engine, context_token, muq_engine, narrative_telemetry, clap_windowed, config, mir_features, similarity
+from . import __version__, context_token, muq_engine, narrative_telemetry, clap_windowed, config, mir_features, similarity
 from .librosa_engine import analyze_array
 from .scoring import compute_report
 
@@ -235,10 +235,6 @@ def _decode_and_pipeline(raw: bytes, ext: str = "") -> dict | JSONResponse:
     cap_n = int(config.CLIP_CAP_S * sr)
     if mono.shape[-1] > cap_n:
         mono = mono[:cap_n]
-    acrcloud_n = int(15 * sr)
-    acrcloud_slice = mono[:acrcloud_n]
-    acrcloud_buf = io.BytesIO()
-    sf.write(acrcloud_buf, acrcloud_slice, sr, format="WAV", subtype="PCM_16")
     with _clap_lock:
         emb, segment_embeddings = clap_windowed.encode_windowed(mono, sr, max_seconds=None)
     genres = muq_engine.top_genres(emb)
@@ -261,7 +257,6 @@ def _decode_and_pipeline(raw: bytes, ext: str = "") -> dict | JSONResponse:
         "emb": emb,
         "segment_embeddings": segment_embeddings,
         "mir": query_mir,
-        "acrcloud_audio": acrcloud_buf.getvalue(),
     }
 
 
@@ -338,7 +333,6 @@ def health() -> dict:
         "version": __version__,
         "corpus": len(_corpus_tracks),
         "segments": int(_flat_catalog.segs_flat.shape[0]) if _flat_catalog else 0,
-        "acrcloudEnabled": acrcloud_engine.is_enabled(),
     }
 
 
@@ -379,7 +373,6 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
             "topMaxSegmentSimilarity": 0.0,
             "modelSha": _model_sha,
             "thresholdDefault": _threshold_default,
-            "acrcloud": acrcloud_engine.to_response_dict(acrcloud_engine.disabled_response()),
             "queryFingerprint": query_fingerprint,
             "contextToken": None,
         }
@@ -427,8 +420,6 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
         nb["criteria"] = _build_criteria_block(pipeline.get("mir"), nb["track"].get("mir_features"))
 
     specificity = float(similarity.query_specificity(pipeline["emb"].astype(np.float32), _flat_catalog))
-    acr = acrcloud_engine.call_for_query(pipeline["acrcloud_audio"])
-    acr_response = acrcloud_engine.to_response_dict(acr)
 
     # Codex round-2 Q3: stateless signed token replaces the in-memory cache.
     # /narrative will verify this token and rebuild context server-side from
@@ -460,7 +451,6 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
             model_sha=_model_sha or "unpinned",
             catalog_sha=_catalog_sha or "no-catalog",
             neighbors=neighbor_fragments,
-            acrcloud_cover_song_id=acr_response.get("coverSongId"),
         )
 
     return {
@@ -473,7 +463,6 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
         "querySpecificity": specificity,
         "modelSha": _model_sha,
         "thresholdDefault": _threshold_default,
-        "acrcloud": acr_response,
         "queryFingerprint": query_fingerprint,
         "contextToken": ctx_token,
     }

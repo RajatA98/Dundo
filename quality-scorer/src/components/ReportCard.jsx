@@ -1,19 +1,19 @@
 import { motion } from 'framer-motion'
 import { deriveHeadline } from '../lib/api.js'
 import SimilarityReport from './SimilarityReport.jsx'
-import AcrCloudRow from './AcrCloudRow.jsx'
 import QualityBadge from './QualityBadge.jsx'
 
 /**
  * ReportCard — the headline result. Composes:
  *   1. SimilarityReport      (Case A or Case B, depending on threshold)
- *   2. Two ACRCloud rows     (Cover Song ID + AI Music Detector)
- *   3. Quality badge         (inline + expandable 7-signal breakdown)
+ *   2. Quality badge         (inline + expandable 7-signal breakdown)
  *
  * Visual contract: ui_mockup_v2_suno_flare.html `article.report` block.
  *
- * Each section is separated by 1px line in --color-line; the ACRCloud signals
- * are independent rows that never compose into one verdict (LOCKED_DECISIONS Q10).
+ * The ACRCloud rows that lived here in the PiedPiper era were retired in
+ * the Dundo pivot (see factory/artifacts/ACRCLOUD_RETIREMENT_NOTE.md).
+ * Dundo's identity is positive-sum discovery, not commercial-second-opinion
+ * copyright detection.
  *
  * @param {Object} props
  * @param {Object} props.neighbors - the /neighbors response payload
@@ -32,9 +32,6 @@ export default function ReportCard({ neighbors, analyze, animate = true, queryFi
     topSegment,
     querySpecificity,
   } = deriveHeadline(neighbors)
-  const acrcloud = neighbors.acrcloud || {}
-  const coverSongId = acrcloud.coverSongId || { status: 'disabled' }
-  const aiMusicDetector = acrcloud.aiMusicDetector || { status: 'disabled' }
 
   return (
     <motion.article
@@ -60,12 +57,6 @@ export default function ReportCard({ neighbors, analyze, animate = true, queryFi
         queryFile={queryFile}
         contextToken={neighbors.contextToken}
       />
-
-      {/* ACRCloud signals — two independent rows, never composed into a verdict. */}
-      <div className="mt-10">
-        <AcrCloudRow variant="coverSongId" payload={coverSongId} status={coverSongId.status} />
-        <AcrCloudRow variant="aiMusicDetector" payload={aiMusicDetector} status={aiMusicDetector.status} />
-      </div>
 
       {/* Quality badge — inline + expandable. Consumes /analyze response. */}
       <div className="mt-6 border-t pt-6" style={{ borderColor: 'var(--color-line)' }}>

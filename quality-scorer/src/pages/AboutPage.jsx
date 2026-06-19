@@ -2,8 +2,8 @@ import { Link } from 'react-router-dom'
 
 /**
  * About page — brief in-app overview. The README on GitHub does the heavy
- * lifting (architecture, design decisions, "what I left out", run instructions).
- * This page is just the elevator pitch + a couple of pointers.
+ * lifting (architecture, design decisions, run instructions, JOURNEY.md
+ * for the chronological story). This page is the elevator pitch + pointers.
  */
 export default function AboutPage() {
   return (
@@ -25,7 +25,7 @@ export default function AboutPage() {
           color: 'var(--color-ink)',
         }}
       >
-        An honest audio-embedding pipeline with a published eval.
+        Discover the indie artists your AI music resonates with.
       </h1>
 
       <div
@@ -33,50 +33,68 @@ export default function AboutPage() {
         style={{ color: 'var(--color-dim)' }}
       >
         <p>
-          Dundo embeds each track with an open-source audio model
-          (MuQ-MuLan, 512-d music-text joint embedding at 24 kHz), then runs
-          nearest-neighbour search against a hand-curated reference catalog of
-          roughly{' '}
-          <strong style={{ color: 'var(--color-ink)' }}>100 recognizable tracks</strong>{' '}
-          from iTunes previews and{' '}
-          <strong style={{ color: 'var(--color-ink)' }}>150+ Creative Commons</strong>{' '}
-          songs from MTG-Jamendo. Two independent ACRCloud signals — cover-song ID and
-          AI music detection — run alongside as commercial second opinions.
+          Dundo (Hindi for <em>search</em>, paired with{' '}
+          <strong style={{ color: 'var(--color-ink)' }}>Suno</strong>, Hindi for{' '}
+          <em>listen</em>) takes an AI-generated track and retrieves indie
+          human artists whose sound resonates with what you made. Each match
+          comes with a grounded explanation of <em>why</em>, the underlying
+          acoustic criteria (tempo, key, harmonic content, timbre), a
+          side-by-side spectrogram view, and links to support the artist
+          directly.
         </p>
 
         <p>
-          No black boxes. The detector quality is{' '}
+          The catalog is{' '}
+          <strong style={{ color: 'var(--color-ink)' }}>Creative-Commons-licensed indie music</strong>{' '}
+          (MTG-Jamendo today; Free Music Archive next). No major labels, no
+          commercial-catalog ingestion, no copyright-detection framing — Dundo
+          is positive-sum discovery, not policing.
+        </p>
+
+        <p>
+          Each upload is embedded with an open-source audio model (MuQ-MuLan,
+          512-d music-text joint embedding at 24 kHz), then nearest-neighbour
+          searched against the local catalog. The discovery narrative is
+          GPT-4o-mini consuming structured metadata — it does not hear audio,
+          it does not determine copyright, and every citation it makes is
+          validated against the supplied context before rendering.
+        </p>
+
+        <p>
+          No black boxes. Retrieval quality is{' '}
           <Link
             to="/evaluation"
             style={{ color: 'var(--color-accent)', textDecoration: 'none' }}
           >
             measured, not claimed
           </Link>
-          : Recall@1, Recall@3, MRR on a hand-built golden set, plus a top-1 cosine
-          histogram on unrelated negatives and named false-positive / false-negative
-          examples with audio playback.
+          : Recall@1, Recall@3, MRR on a hand-built golden set, plus a top-1
+          cosine histogram on unrelated negatives and named false-positive /
+          false-negative examples with audio playback.
         </p>
 
         <p>
-          The reference catalog is a sampled demo set, not a production catalog —
-          productionizing this would mean indexing a licensed catalog the way a vendor
-          would internally. That trade-off is named explicitly on the evaluation page
-          under{' '}
-          <em style={{ color: 'var(--color-ink)' }}>limitations</em>.
-        </p>
-
-        <p>
-          See the full architecture and the &ldquo;what I deliberately left out&rdquo; section in
-          the{' '}
+          Dundo is forked from{' '}
           <a
-            href="https://github.com/RajatA98"
+            href="https://github.com/RajatA98/PiedPiper"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--color-accent)', textDecoration: 'none' }}
+          >
+            PiedPiper
+          </a>
+          , the original acoustic-similarity research project. See{' '}
+          <a
+            href="https://github.com/RajatA98/Dundo"
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: 'var(--color-accent)', textDecoration: 'none' }}
           >
             project README on GitHub
-          </a>
-          .
+          </a>{' '}
+          for full architecture + decisions, or{' '}
+          <code style={{ color: 'var(--color-ink)' }}>JOURNEY.md</code> for the
+          chronological story of how we got here.
         </p>
       </div>
     </div>

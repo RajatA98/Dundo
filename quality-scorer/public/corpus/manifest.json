@@ -7,7 +7,7 @@
   "pooling": "l2_normalized_mean",
   "threshold_default": 0.7,
   "tier_counts": {
-    "tier1": 10,
+    "tier1": 0,
     "tier2": 145
   },
   "generated_at": "2026-06-13T18:11:59.861169+00:00",
@@ -19,5 +19,6 @@
       "segment_embeddings.npz": "e4385247045697970fe35717235656871cf4b2b940a63f0f03eacd7d0b20a6ee"
     },
     "combined": "1eb424e6c2def846424875738d9c1812ad758e7ac01aea97852e6e9dce547747"
-  }
+  },
+  "track_count": 145
 }

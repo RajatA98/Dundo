@@ -14,8 +14,8 @@
  * The breakdown shows the existing 7 signals from /analyze:
  *   CLIPPING, SILENCE (lead/tail), LOUDNESS, CHANNELS, SAMPLE RATE, DURATION, DC OFFSET.
  *
- * The badge consumes the existing /analyze response shape — keep this
- * decoupled from /neighbors so Phase 5 ACRCloud rows don't get tangled here.
+ * The badge consumes the existing /analyze response shape, decoupled from
+ * /neighbors so the quality signal stays orthogonal to the discovery flow.
  *
  * @param {Object} props
  * @param {Object|null} props.analyze - the legacy /analyze response (Track-shape JSON).

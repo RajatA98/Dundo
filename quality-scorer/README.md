@@ -29,10 +29,12 @@ src/
     format.js, prng.js  # formatting + deterministic RNG helpers
   components/
     Nav.jsx, Layout.jsx, Hero.jsx
-    DropZone.jsx, ExampleChips.jsx
+    DropZone.jsx
     ReportCard.jsx                # Case A + Case B in one component
     SimilarityReport.jsx          # top-3 ranked rows + headline
-    AcrCloudRow.jsx, SunoPill.jsx # two ACRCloud rows; rose tint when likely_source == "suno"
+    SectionComparePanel.jsx       # row-expansion: three tabs (Why / Distinctive / Visual)
+    NarrativeBlock.jsx            # LLM narrative rendering for the first two tabs
+    SpectrogramCompare.jsx        # WaveSurfer.js spectrogram view for the Visual tab
     QualityBadge.jsx              # inline badge + expandable 7-signal breakdown
   pages/
     ScorerPage.jsx       # landing — drop zone, examples, ReportCard
@@ -40,7 +42,7 @@ src/
     AboutPage.jsx
 ```
 
-The design tokens live in `tailwind.config.js`. The Suno-flare tokens (`--suno`, `--suno-soft`, `--suno-deep`) are only consumed by `SunoPill.jsx` and a small detector sigil in the footer — see `factory/artifacts/CLAUDE_UI_DESIGN_PROMPT.md` for the rules.
+The design tokens live in `tailwind.config.js`. The PiedPiper-era Suno-flare accent tokens (`--suno`, `--suno-soft`, `--suno-deep`) survived the Dundo fork as part of the existing palette but are no longer load-bearing for any single component — they're available as a neutral accent if a future iteration needs them. See `factory/artifacts/_PREPIVOT/CLAUDE_UI_DESIGN_PROMPT.md` for the PiedPiper-era design rules.
 
 ## Stack
 

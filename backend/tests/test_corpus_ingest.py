@@ -157,10 +157,16 @@ def test_segment_embeddings_shape_and_l2_normalized():
 
 @pytestmark_corpus
 def test_tier1_rows_have_attribution_and_track_view_url():
-    """Apple Search API terms — every Tier-1 row must carry attribution + link-out."""
+    """If any Tier-1 (iTunes) rows survive in the corpus, they MUST still carry
+    attribution + link-out per Apple Search API terms. Dundo retired the
+    Tier-1 ingest in the pivot from PiedPiper — `ingest_tier1` is now a no-op
+    in rebuild_corpus.py — so the expected steady state is zero Tier-1 rows.
+    Test skips gracefully when none are present; still enforces the
+    attribution invariant if any leak through during a transition."""
     corpus = json.loads((CORPUS_DIR / "corpus.json").read_text())
     tier1 = [r for r in corpus if r["tier"] == "tier1"]
-    assert tier1, "expected at least one tier1 row in the corpus"
+    if not tier1:
+        pytest.skip("Dundo catalog has no Tier-1 rows — invariant trivially holds")
 
     for row in tier1:
         assert row.get("attribution_required") is True, f"{row['track_id']}: tier1 must set attribution_required=True"
