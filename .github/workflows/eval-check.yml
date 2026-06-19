@@ -1,0 +1,75 @@
+name: Eval reproducibility
+
+# Re-runs `python -m backend.scripts.run_eval` and fails the build if the
+# regenerated eval.json differs from the committed file. Audit-grade
+# reproducibility loop. Only triggers when a PR touches eval inputs or
+# the corpus, because the full run is slow.
+
+on:
+  pull_request:
+    paths:
+      - 'backend/eval_input/**'
+      - 'quality-scorer/public/corpus/**'
+      - 'backend/backend/scripts/run_eval.py'
+      - 'backend/backend/scripts/build_golden_set.py'
+      - 'backend/backend/similarity.py'
+      - 'backend/backend/clap_windowed.py'
+
+jobs:
+  eval-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('backend/pyproject.toml') }}
+
+      # Cache the HF model snapshot so subsequent runs skip the multi-minute download.
+      # Key on the pinned model SHA from the committed manifest.
+      - name: Extract model_sha from manifest
+        id: model
+        run: |
+          SHA=$(python -c "import json; print(json.load(open('quality-scorer/public/corpus/manifest.json'))['model_sha'])")
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Cache HF model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-models-${{ steps.model.outputs.sha }}
+
+      - name: Install backend
+        run: pip install -e "backend/[runtime,ingest,dev]"
+
+      - name: Snapshot committed eval.json
+        run: cp quality-scorer/public/corpus/eval.json /tmp/eval.committed.json
+
+      - name: Re-run eval
+        env:
+          HF_HUB_OFFLINE: '0'
+        run: python -m backend.scripts.run_eval
+
+      - name: Diff regenerated vs committed
+        run: |
+          # Ignore the `generated_at` timestamp when diffing.
+          python -c "
+          import json
+          import sys
+          a = json.load(open('/tmp/eval.committed.json'))
+          b = json.load(open('quality-scorer/public/corpus/eval.json'))
+          for d in (a, b):
+              if 'manifest' in d:
+                  d['manifest'].pop('generated_at', None)
+          if a != b:
+              sys.exit('eval.json drifted from committed version — re-run run_eval locally and commit the new file.')
+          print('eval.json is reproducible.')
+          "

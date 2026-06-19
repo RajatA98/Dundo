@@ -1,0 +1,45 @@
+# PiedPiper golden set input — Phase 6.
+#
+# YOU fill this in after generating Suno tracks. The Codex-built
+# `build_golden_set.py` reads this + your audio files and writes
+# backend/eval_input/golden_set.json (the actual eval input).
+#
+# Phase 6 workflow:
+#   1. Pick 30 seed songs from the live corpus (corpus.json).
+#   2. For each seed, prompt Suno twice to produce a track that mimics it.
+#      Save the mp3s to `backend/eval_audio/positives/`.
+#   3. Generate 20-30 unrelated Suno tracks (random styles, no seed).
+#      Save to `backend/eval_audio/negatives/`.
+#   4. Fill out the YAML below with the resulting audio paths + seed mappings.
+#   5. Run `python -m backend.scripts.build_golden_set`.
+
+positives:
+  # 30 entries — one per seed song. Each becomes 2 query rows (one per Suno generation).
+  - seed_track_id: "tier1:itunes:1499378034"   # Blinding Lights — The Weeknd
+    seed_title: "Blinding Lights"
+    suno_audio_paths:
+      - "backend/eval_audio/positives/seed01_v1.mp3"
+      - "backend/eval_audio/positives/seed01_v2.mp3"
+    prompt_used: "Synthwave-tinged pop banger, driving 4/4, retro 80s production"
+
+  - seed_track_id: "tier1:itunes:..."
+    seed_title: "..."
+    suno_audio_paths:
+      - "backend/eval_audio/positives/seed02_v1.mp3"
+      - "backend/eval_audio/positives/seed02_v2.mp3"
+    prompt_used: "..."
+
+  # ... 28 more
+
+negatives:
+  # 20-30 unrelated Suno generations. No specific seed; pick a wide range of genres
+  # so the negatives represent "out-of-catalog" reality.
+  - id: "neg_001"
+    audio_path: "backend/eval_audio/negatives/neg_001.mp3"
+    prompt_used: "Experimental glitch jazz with field recordings"
+
+  - id: "neg_002"
+    audio_path: "backend/eval_audio/negatives/neg_002.mp3"
+    prompt_used: "Ambient drone with no melody"
+
+  # ... 18-28 more

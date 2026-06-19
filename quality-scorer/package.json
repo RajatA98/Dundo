@@ -1,0 +1,31 @@
+{
+  "name": "piedpiper",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PiedPiper — pre-publish acoustic-similarity scanner for AI-generated music.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sentry/react": "^8.55.2",
+    "framer-motion": "^11.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "wavesurfer.js": "^7.12.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.6",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^25.0.1",
+    "tailwindcss": "^4.0.6",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.9"
+  }
+}

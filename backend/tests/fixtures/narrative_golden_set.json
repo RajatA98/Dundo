@@ -1,0 +1,368 @@
+{
+  "$schema": "narrative_golden_set_v1",
+  "description": "Golden set for the RAG narrative layer (ADR-0005). Each case carries a NarrativeContext, a mocked _call_openai_json return value, and the expected discriminated-union outcome from generate_narrative(). The eval harness runs each case with backend.rag_narrative._call_openai_json patched to return the mocked value, then asserts result.kind + result.reason match expected.",
+  "version": "1",
+  "cases": [
+    {
+      "name": "happy_path_whysimilar",
+      "category": "happy_path",
+      "description": "Strong evidence + valid LLM citations → narrative kind.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "trackId": "tier1:itunes:380907765",
+        "title": "Take On Me",
+        "artist": "a-ha",
+        "queryWindow": [20.0, 30.0],
+        "matchWindow": [10.0, 20.0],
+        "rawCosine": 0.881,
+        "criteria": [
+          {"id": "tempo", "queryValue": 100.0, "matchValue": 100.5, "agreement": 1.0, "label": "same tempo"},
+          {"id": "key", "queryValue": "C major", "matchValue": "C major", "agreement": 1.0, "label": "same key"},
+          {"id": "harmonic", "queryValue": {"shape": [12]}, "matchValue": {"shape": [12]}, "agreement": 0.82, "label": "similar chord palette"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "The tracks share the same tempo and key, with a closely aligned chord palette around the cited windows.",
+        "citations": [
+          {
+            "trackId": "tier1:itunes:380907765",
+            "side": "query",
+            "timestampRange": [20.0, 30.0],
+            "criterionIds": ["tempo", "key"],
+            "citedValues": {"tempo.queryValue": 100.0, "tempo.matchValue": 100.5, "key.matchValue": "C major", "rawCosine": 0.881}
+          }
+        ]
+      },
+      "expected_kind": "narrative",
+      "expected_reason": null
+    },
+    {
+      "name": "happy_path_creatoradvice",
+      "category": "happy_path",
+      "description": "Same context, different mode → creator advice narrative.",
+      "mode": "creatorAdvice",
+      "context": {
+        "queryFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trackId": "tier1:itunes:1488408568",
+        "title": "Blinding Lights",
+        "artist": "The Weeknd",
+        "queryWindow": [0.0, 10.0],
+        "matchWindow": [0.0, 10.0],
+        "rawCosine": 0.745,
+        "criteria": [
+          {"id": "tempo", "queryValue": 171.0, "matchValue": 171.0, "agreement": 1.0, "label": "same tempo"},
+          {"id": "timbre", "queryValue": {"shape": [26]}, "matchValue": {"shape": [26]}, "agreement": 0.78, "label": "similar production feel"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "creatorAdvice",
+        "prose": "To make this generation more distinctive: vary tempo slightly from 171 BPM, change the brushed-vs-pad synth balance to reduce timbre alignment, and try a contrasting key for the hook.",
+        "citations": [
+          {
+            "trackId": "tier1:itunes:1488408568",
+            "side": "match",
+            "timestampRange": [0.0, 10.0],
+            "criterionIds": ["tempo", "timbre"],
+            "citedValues": {"tempo.matchValue": 171.0}
+          }
+        ]
+      },
+      "expected_kind": "narrative",
+      "expected_reason": null
+    },
+    {
+      "name": "happy_path_high_cosine_low_agreement",
+      "category": "happy_path",
+      "description": "Cosine >= 0.75 passes the gate even when criteria agreements are weak.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "trackId": "tier2:jamendo:43419",
+        "title": "Sunburst Drift",
+        "artist": "Jamendo Artist",
+        "queryWindow": [12.0, 22.0],
+        "matchWindow": [4.0, 14.0],
+        "rawCosine": 0.79,
+        "criteria": [
+          {"id": "harmonic", "queryValue": {"shape": [12]}, "matchValue": {"shape": [12]}, "agreement": 0.30, "label": "weak chord overlap"},
+          {"id": "timbre", "queryValue": {"shape": [26]}, "matchValue": {"shape": [26]}, "agreement": 0.40, "label": "different production"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Cosine similarity is strong despite weak per-criterion agreement — likely a more abstract embedding-level match in mood or instrumentation.",
+        "citations": [
+          {
+            "trackId": "tier2:jamendo:43419",
+            "side": "query",
+            "timestampRange": [12.0, 22.0],
+            "criterionIds": ["harmonic", "timbre"],
+            "citedValues": {"rawCosine": 0.79}
+          }
+        ]
+      },
+      "expected_kind": "narrative",
+      "expected_reason": null
+    },
+    {
+      "name": "low_context_missing_criteria",
+      "category": "low_context",
+      "description": "Empty criteria list → gate short-circuits before LLM call.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "trackId": "tier1:itunes:380907765",
+        "title": "Some Track",
+        "artist": "Some Artist",
+        "queryWindow": [0.0, 10.0],
+        "matchWindow": [0.0, 10.0],
+        "rawCosine": 0.5,
+        "criteria": [],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": "MUST_NOT_BE_CALLED",
+      "expected_kind": "low_confidence",
+      "expected_reason": "missing-criteria"
+    },
+    {
+      "name": "low_context_missing_title",
+      "category": "low_context",
+      "description": "Title is empty → gate short-circuits as missing-metadata.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "trackId": "tier1:itunes:380907765",
+        "title": "",
+        "artist": "a-ha",
+        "queryWindow": [0.0, 10.0],
+        "matchWindow": [0.0, 10.0],
+        "rawCosine": 0.85,
+        "criteria": [
+          {"id": "tempo", "queryValue": 100.0, "matchValue": 100.5, "agreement": 1.0, "label": "same tempo"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": "MUST_NOT_BE_CALLED",
+      "expected_kind": "low_confidence",
+      "expected_reason": "missing-metadata"
+    },
+    {
+      "name": "low_context_weak_evidence",
+      "category": "low_context",
+      "description": "All criteria agreement below 0.55 AND raw cosine below 0.75 → weak-evidence.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "trackId": "tier1:itunes:380907765",
+        "title": "Take On Me",
+        "artist": "a-ha",
+        "queryWindow": [0.0, 10.0],
+        "matchWindow": [0.0, 10.0],
+        "rawCosine": 0.55,
+        "criteria": [
+          {"id": "tempo", "queryValue": 100.0, "matchValue": 120.0, "agreement": 0.40, "label": "different tempo"},
+          {"id": "key", "queryValue": "C major", "matchValue": "F minor", "agreement": 0.30, "label": "different key"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": "MUST_NOT_BE_CALLED",
+      "expected_kind": "low_confidence",
+      "expected_reason": "weak-evidence"
+    },
+    {
+      "name": "hallucinated_unknown_criterion",
+      "category": "hallucinated_citation",
+      "description": "LLM cites a criterion not present in the context → validation rejects.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
+        "trackId": "tier1:itunes:380907765",
+        "title": "Take On Me",
+        "artist": "a-ha",
+        "queryWindow": [0.0, 10.0],
+        "matchWindow": [0.0, 10.0],
+        "rawCosine": 0.881,
+        "criteria": [
+          {"id": "key", "queryValue": "C major", "matchValue": "C major", "agreement": 1.0, "label": "same key"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Made up.",
+        "citations": [
+          {
+            "trackId": "tier1:itunes:380907765",
+            "side": "query",
+            "timestampRange": [0.0, 10.0],
+            "criterionIds": ["tempo"],
+            "citedValues": {"tempo.queryValue": 100.0}
+          }
+        ]
+      },
+      "expected_kind": "unavailable",
+      "expected_reason": "citation-hallucinated"
+    },
+    {
+      "name": "hallucinated_wrong_trackid",
+      "category": "hallucinated_citation",
+      "description": "LLM cites a different trackId than the one in context → rejected.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+        "trackId": "tier1:itunes:380907765",
+        "title": "Take On Me",
+        "artist": "a-ha",
+        "queryWindow": [0.0, 10.0],
+        "matchWindow": [0.0, 10.0],
+        "rawCosine": 0.881,
+        "criteria": [
+          {"id": "tempo", "queryValue": 100.0, "matchValue": 100.5, "agreement": 1.0, "label": "same tempo"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Spoofed citation.",
+        "citations": [
+          {
+            "trackId": "tier1:itunes:999999999",
+            "side": "query",
+            "timestampRange": [0.0, 10.0],
+            "criterionIds": ["tempo"],
+            "citedValues": {"tempo.queryValue": 100.0}
+          }
+        ]
+      },
+      "expected_kind": "unavailable",
+      "expected_reason": "citation-hallucinated"
+    },
+    {
+      "name": "hallucinated_wrong_tempo_value",
+      "category": "hallucinated_citation",
+      "description": "Cited tempo value differs from context by > 2 BPM → rejected.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+        "trackId": "tier1:itunes:380907765",
+        "title": "Take On Me",
+        "artist": "a-ha",
+        "queryWindow": [0.0, 10.0],
+        "matchWindow": [0.0, 10.0],
+        "rawCosine": 0.881,
+        "criteria": [
+          {"id": "tempo", "queryValue": 100.0, "matchValue": 100.5, "agreement": 1.0, "label": "same tempo"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Tempo around 130 BPM.",
+        "citations": [
+          {
+            "trackId": "tier1:itunes:380907765",
+            "side": "query",
+            "timestampRange": [0.0, 10.0],
+            "criterionIds": ["tempo"],
+            "citedValues": {"tempo.queryValue": 130.0}
+          }
+        ]
+      },
+      "expected_kind": "unavailable",
+      "expected_reason": "citation-hallucinated"
+    },
+    {
+      "name": "hallucinated_timestamp_outside_window",
+      "category": "hallucinated_citation",
+      "description": "Cited timestampRange is outside the side-appropriate window → rejected.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "4444444444444444444444444444444444444444444444444444444444444444",
+        "trackId": "tier1:itunes:380907765",
+        "title": "Take On Me",
+        "artist": "a-ha",
+        "queryWindow": [20.0, 30.0],
+        "matchWindow": [40.0, 50.0],
+        "rawCosine": 0.881,
+        "criteria": [
+          {"id": "tempo", "queryValue": 100.0, "matchValue": 100.5, "agreement": 1.0, "label": "same tempo"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Off-window.",
+        "citations": [
+          {
+            "trackId": "tier1:itunes:380907765",
+            "side": "query",
+            "timestampRange": [60.0, 70.0],
+            "criterionIds": ["tempo"],
+            "citedValues": {"tempo.queryValue": 100.0}
+          }
+        ]
+      },
+      "expected_kind": "unavailable",
+      "expected_reason": "citation-hallucinated"
+    },
+    {
+      "name": "malformed_schema",
+      "category": "malformed_output",
+      "description": "LLM emits JSON that doesn't match NarrativeResponse schema → rejected.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "5555555555555555555555555555555555555555555555555555555555555555",
+        "trackId": "tier1:itunes:380907765",
+        "title": "Take On Me",
+        "artist": "a-ha",
+        "queryWindow": [0.0, 10.0],
+        "matchWindow": [0.0, 10.0],
+        "rawCosine": 0.881,
+        "criteria": [
+          {"id": "tempo", "queryValue": 100.0, "matchValue": 100.5, "agreement": 1.0, "label": "same tempo"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "prose": 12345,
+        "citations": "not-a-list"
+      },
+      "expected_kind": "unavailable",
+      "expected_reason": "malformed-llm-output"
+    },
+    {
+      "name": "openai_returns_none",
+      "category": "openai_error",
+      "description": "SDK helper returns None on transient failure → unavailable openai-error.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "6666666666666666666666666666666666666666666666666666666666666666",
+        "trackId": "tier1:itunes:380907765",
+        "title": "Take On Me",
+        "artist": "a-ha",
+        "queryWindow": [0.0, 10.0],
+        "matchWindow": [0.0, 10.0],
+        "rawCosine": 0.881,
+        "criteria": [
+          {"id": "tempo", "queryValue": 100.0, "matchValue": 100.5, "agreement": 1.0, "label": "same tempo"}
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": null,
+      "expected_kind": "unavailable",
+      "expected_reason": "openai-error"
+    }
+  ]
+}

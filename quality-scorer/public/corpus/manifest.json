@@ -1,0 +1,23 @@
+{
+  "model_id": "OpenMuQ/MuQ-MuLan-large",
+  "model_sha": "2e01c796b71dca71b45251384c04cd7b237c9020",
+  "embedding_dim": 512,
+  "window_seconds": 10,
+  "query_max_seconds": 90,
+  "pooling": "l2_normalized_mean",
+  "threshold_default": 0.7,
+  "tier_counts": {
+    "tier1": 10,
+    "tier2": 145
+  },
+  "generated_at": "2026-06-13T18:11:59.861169+00:00",
+  "sha256": {
+    "files": {
+      "corpus.json": "3ee7870ea0dde2a2bde53004ccb33c3b4122815555d40bd5cc987da992c9c4d5",
+      "embeddings.npy": "1dc17f84d87e3b92613549d688824a02da9cd9cdd170c4a2ff3256a25ab0256a",
+      "examples.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "segment_embeddings.npz": "e4385247045697970fe35717235656871cf4b2b940a63f0f03eacd7d0b20a6ee"
+    },
+    "combined": "1eb424e6c2def846424875738d9c1812ad758e7ac01aea97852e6e9dce547747"
+  }
+}

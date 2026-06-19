@@ -1,0 +1,51 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite / build outputs
+dist/
+.vite/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Hugging Face local cache (gets pulled inside Docker on the Space)
+.hf_cache/
+
+# Local env files — only the .example files should be tracked
+.env
+.env.local
+.env.development.local
+
+# HF Space staging dir created by deploy/sync_to_hf.sh
+# (lives at ../piedpiper-hf-space by default but allow override here too)
+piedpiper-hf-space/
+
+# Audio drops used during local eval runs but not part of the shipped catalog
+backend/eval_input/audio/
+
+# Project Factory artifacts — local-only working docs (plans, reviews,
+# audits, eval results). The historical ones tracked from before this
+# rule landed stay tracked; new ones stay local.
+factory/artifacts/

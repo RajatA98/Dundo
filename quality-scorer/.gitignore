@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.vite
+public/corpus/audio/
+public/corpus/embeddings.npy
+.vercel

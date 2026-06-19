@@ -1,0 +1,53 @@
+# PiedPiper named examples — the eval-page credibility-mover.
+#
+# After running `python -m backend.scripts.run_eval` once with empty named
+# blocks, look at the per-query results and pick:
+#   - 5 false-positive examples (cosine ≥ 0.70 but you'd call it NOT a real match)
+#   - 5 false-negative examples (cosine < 0.70 but you'd call it a real match)
+#
+# These named cards land harder than any additional metric. Write the
+# "why this happened" line yourself — that's the engineering-judgment signal.
+
+false_positives:
+  - id: "fp_001"
+    query_audio_path: "backend/eval_audio/positives/seed03_v1.mp3"   # Suno-generated
+    query_title: "Neon Midnight (Suno)"
+    retrieved_audio_path: "backend/eval_audio/catalog_clips/blinding_lights.mp3"  # iTunes preview
+    retrieved_title: "Blinding Lights — The Weeknd"
+    cosine: 0.72
+    why: "Shared 80s synthwave production palette and tempo (~170 BPM) fooled the embedder; the melodies are unrelated."
+
+  - id: "fp_002"
+    # ...
+
+  # ... 3 more (total 5)
+
+false_negatives:
+  - id: "fn_001"
+    query_audio_path: "backend/eval_audio/positives/seed07_v1.mp3"
+    query_title: "Skyline Echo (Suno)"
+    retrieved_audio_path: "backend/eval_audio/catalog_clips/levitating.mp3"
+    retrieved_title: "Levitating — Dua Lipa"
+    cosine: 0.62
+    why: "Disco-pop groove is clearly there, but a key and tempo shift pushed cosine under the cutoff."
+
+  - id: "fn_002"
+    # ...
+
+  # ... 3 more (total 5)
+
+# Optional — overrides the default methodology / limitations text in run_eval.py.
+# If absent, the defaults baked into run_eval.py are used.
+methodology: |
+  30 seed songs were hand-picked from the corpus; for each seed, two Suno
+  generations were produced by prompting toward the seed's style and lyrical
+  theme. 20 unrelated negatives are Suno generations with no intentional
+  similarity to any catalog track. Recall@k and MRR are computed on the 60
+  positive queries; the histogram is computed on the negatives.
+
+limitations: |
+  Catalog size (~160 tracks) is the dominant failure mode — a real source
+  outside the catalog can't be retrieved. Queries are single-generator
+  (Suno only); Udio or others may shift the score distribution. There is no
+  inter-rater agreement on what counts as derivative, and the seed set
+  carries a US-pop bias that likely inflates recall relative to other genres.

@@ -1,0 +1,107 @@
+# PiedPiper reference catalog — Tier 1 (hand-curated iTunes) + Tier 2 (CC bulk).
+#
+# This file is the INPUT to `python -m backend.scripts.rebuild_corpus`. The
+# script looks up each Tier-1 row via the iTunes Search API and bulk-loads
+# Tier-2 rows from the FMA / MTG-Jamendo datasets, then writes the corpus
+# files to `quality-scorer/public/corpus/`. See PROJECT_PLAN Phase 1.
+#
+# Per LOCKED_DECISIONS — TARGETS:
+#   - Tier 1: ~100 recognizable tracks (Top 40 + classics, across genres).
+#   - Tier 2: ~200–400 Creative-Commons tracks (genre-balanced).
+#
+# IMPORTANT — Apple Search API rights:
+#   - iTunes preview audio is fetched once at ingest, embedded, and DISCARDED.
+#   - The deployed UI must show iTunes attribution + a link-out on every
+#     Tier-1 match. This is enforced by `attribution_required: true` being set
+#     for every Tier-1 row in the output `corpus.json`.
+
+# ------------------------------------------------------------------------------
+# Tier 1 — recognizable tracks, hand-picked.
+# Expand this list toward ~100 entries before committing the corpus output.
+# `expected_genre` is optional and only used as a sanity check / for
+# genre-balanced sampling in `build_examples`.
+# ------------------------------------------------------------------------------
+
+tier1:
+  - title: "Blinding Lights"
+    artist: "The Weeknd"
+    expected_genre: "Pop"
+
+  - title: "Bad Guy"
+    artist: "Billie Eilish"
+    expected_genre: "Pop"
+
+  - title: "Old Town Road"
+    artist: "Lil Nas X"
+    expected_genre: "Country Rap"
+
+  - title: "Shape of You"
+    artist: "Ed Sheeran"
+    expected_genre: "Pop"
+
+  - title: "Take On Me"
+    artist: "a-ha"
+    expected_genre: "Synth-Pop"
+
+  - title: "Bohemian Rhapsody"
+    artist: "Queen"
+    expected_genre: "Rock"
+
+  - title: "Get Lucky"
+    artist: "Daft Punk"
+    expected_genre: "Disco"
+
+  - title: "Lose Yourself"
+    artist: "Eminem"
+    expected_genre: "Hip-Hop"
+
+  - title: "Hotel California"
+    artist: "Eagles"
+    expected_genre: "Rock"
+
+  - title: "Smells Like Teen Spirit"
+    artist: "Nirvana"
+    expected_genre: "Grunge"
+
+  # TODO: expand toward ~100. Pick across genres for breadth of recognizability:
+  # Pop, Hip-Hop, Rock, R&B, Electronic, Country, Latin, K-Pop, Reggaeton,
+  # Indie Rock, Jazz, Classical, Soul, EDM, Synthwave, etc.
+
+# ------------------------------------------------------------------------------
+# Tier 2 — Creative-Commons bulk catalog. Configure either or both sources.
+# ------------------------------------------------------------------------------
+
+tier2:
+  jamendo:
+    count: 100
+    genres_balanced:
+      - "rock"
+      - "pop"
+      - "electronic"
+      - "hiphop"
+      - "folk"
+      - "jazz"
+      - "classical"
+
+# ------------------------------------------------------------------------------
+# Staged example chips on the landing page. 3–5 entries.
+# Each `query_audio` path is relative to the repo root.
+#
+# NOTE — these audio files do NOT exist at Phase 1 ingest time. They are
+# Suno generations that arrive during Phase 6 (eval pipeline). The Phase 1
+# `build_examples()` function gracefully skips specs whose `query_audio` file
+# is missing — logs an info line, continues. After Phase 6, real Suno tracks
+# get dropped in at the paths below and the next `rebuild_corpus` run will
+# produce examples.json with 3 entries.
+# ------------------------------------------------------------------------------
+
+examples:
+  - id: "ex_suno_pop_001"
+    chipLabel: "Suno · Pop"
+    query_audio: "examples/audio/suno_pop_001.mp3"  # Phase 6
+  - id: "ex_suno_synthwave_002"
+    chipLabel: "Suno · Synthwave"
+    query_audio: "examples/audio/suno_synthwave_002.mp3"  # Phase 6
+  - id: "ex_suno_unique_003"
+    chipLabel: "Suno · No match"
+    query_audio: "examples/audio/suno_unique_003.mp3"  # Phase 6
