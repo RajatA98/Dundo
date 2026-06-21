@@ -40,7 +40,7 @@ from pydantic import BaseModel, Field
 # place via clap_windowed's swap. We still import clap_engine here only because
 # legacy code paths may reference it; the encoder load + genre tagging both go
 # through muq_engine.
-from . import __version__, context_token, muq_engine, narrative_telemetry, clap_windowed, config, mir_features, similarity
+from . import __version__, context_token, corpus_dataset, muq_engine, narrative_telemetry, clap_windowed, config, mir_features, similarity
 from .librosa_engine import analyze_array
 from .scoring import compute_report
 
@@ -98,7 +98,7 @@ def _load_corpus() -> None:
     global _corpus_tracks, _corpus_embeddings, _corpus_by_id, _flat_catalog
     global _catalog_cosine_distribution
     global _model_sha, _catalog_sha, _threshold_default
-    corpus_dir = Path(os.getenv("CORPUS_DIR", str(_default_corpus_dir())))
+    corpus_dir = corpus_dataset.resolve_corpus_dir(Path(os.getenv("CORPUS_DIR", str(_default_corpus_dir()))))
     cpath = corpus_dir / "corpus.json"
     epath = corpus_dir / "embeddings.npy"
     spath = corpus_dir / "segment_embeddings.npz"

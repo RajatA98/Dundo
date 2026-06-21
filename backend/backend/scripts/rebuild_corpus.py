@@ -1,19 +1,20 @@
 """Rebuild the Dundo reference catalog from scratch.
 
-Phase 1 entry point. Reads `backend/catalog.yaml`, hits iTunes Search + the
-chosen Tier-2 source(s), runs windowed CLAP encoding on every track, and
-writes the five corpus files to `quality-scorer/public/corpus/`.
+Phase 2 entry point. Reads the Jamendo-only `backend/catalog.yaml`, optionally
+builds a checkpoint dry-run manifest, and then runs the full MuQ encode when
+explicitly invoked on a machine with the catalog audio available.
 
 Usage (from repo root):
     pip install -e "backend/[runtime,ingest,dev]"
+    python -m backend.scripts.rebuild_corpus --dry-run --limit 500
     python -m backend.scripts.rebuild_corpus
     # or, with explicit paths:
     python -m backend.scripts.rebuild_corpus \\
         --catalog backend/catalog.yaml \\
         --out quality-scorer/public/corpus
 
-Re-running is safe and deterministic given the same catalog.yaml +
-pinned CLAP revision. The whole job is ~3–5 min on a laptop for ~300 tracks.
+Do the dry run first. The full ~55K encode belongs on the cloud GPU box from
+`factory/artifacts/GPU_ENCODE_RUNBOOK.md`, not on a laptop.
 """
 
 from __future__ import annotations
@@ -27,8 +28,6 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-import audioread
-import librosa
 import numpy as np
 from tqdm import tqdm
 import yaml
@@ -38,6 +37,7 @@ from backend import clap_windowed
 
 from . import _corpus_writer as cw
 from . import _fma_loader, _jamendo_loader
+from . import phase2_catalog
 
 # This file lives at <repo>/backend/backend/scripts/rebuild_corpus.py
 # parents[0]=scripts/, [1]=backend/ (package), [2]=backend/ (project), [3]=<repo>
@@ -53,6 +53,22 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     catalog = _load_catalog_yaml(args.catalog)
+    jamendo_config = phase2_catalog.validate_phase2_catalog_config(catalog)
+
+    if args.dry_run:
+        candidates = _jamendo_loader.load_jamendo_tracks(**jamendo_config)
+        manifest = phase2_catalog.build_checkpoint_manifest(
+            candidates,
+            limit=args.limit,
+            per_artist_cap=_per_artist_cap(catalog),
+        )
+        phase2_catalog.write_json(args.checkpoint, manifest)
+        summary = manifest["summary"]["byStatus"]
+        print(
+            f"[phase2:dry-run] wrote {manifest['summary']['total']} Jamendo candidate(s) "
+            f"to {args.checkpoint} · statuses={summary}"
+        )
+        return
 
     # --- Tier 1: iTunes-curated recognizable tracks ---------------------------
     tier1_tracks = ingest_tier1(catalog.get("tier1", []))
@@ -111,18 +127,16 @@ def ingest_tier1(tier1_entries: list[dict]) -> list[cw.CorpusTrack]:
 
 
 def ingest_tier2(tier2_config: dict) -> list[cw.CorpusTrack]:
-    """Pull breadth tracks from FMA and/or Jamendo per the catalog.yaml config.
+    """Pull breadth tracks from Jamendo per the catalog.yaml config.
 
     Args:
         tier2_config: shape like:
             {
-              "fma":     {"count": 100, "genres_balanced": ["Pop", "Rock", ...]},
               "jamendo": {"count": 200, "genres_balanced": [...]}
             }
-          Either key is optional.
 
     Returns:
-        Combined list of CorpusTrack from all configured Tier-2 sources.
+        Combined list of CorpusTrack from configured Tier-2 sources.
     """
     results: list[cw.CorpusTrack] = []
 
@@ -237,12 +251,20 @@ def _load_catalog_yaml(path: Path) -> dict:
     return data
 
 
+def _per_artist_cap(catalog: dict) -> int | None:
+    gates = catalog.get("quality_gates") or {}
+    cap = gates.get("per_artist_cap")
+    return int(cap) if cap is not None else None
+
+
 def _decode_to_mono(audio_bytes: bytes) -> tuple:
     """Decode arbitrary audio bytes into mono float array + sample rate.
 
     Returns:
         (wav_mono: np.ndarray, sr: int)
     """
+    import librosa
+
     try:
         y, sr = librosa.load(io.BytesIO(audio_bytes), sr=config.ANALYSIS_SR, mono=True)
         return y.astype(np.float32), int(sr)
@@ -259,6 +281,9 @@ def _decode_to_mono(audio_bytes: bytes) -> tuple:
 
 def _decode_with_audioread(audio_bytes: bytes) -> tuple[np.ndarray, int]:
     """Decode AAC/M4A previews through audioread/CoreAudio when SoundFile cannot."""
+    import audioread
+    import librosa
+
     with tempfile.NamedTemporaryFile(suffix=".m4a") as tmp:
         tmp.write(audio_bytes)
         tmp.flush()
@@ -306,6 +331,14 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG, help="Path to catalog.yaml")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT_DIR, help="Output directory for corpus files")
+    p.add_argument("--dry-run", action="store_true", help="write Phase-2 checkpoint manifest without audio decode/encode")
+    p.add_argument("--limit", type=int, default=500, help="candidate limit for --dry-run")
+    p.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=REPO_ROOT / "factory" / "artifacts" / "PHASE2_DRY_RUN_MANIFEST.json",
+        help="where to write the Phase-2 dry-run checkpoint manifest",
+    )
     return p.parse_args()
 
 

@@ -1,9 +1,9 @@
 """Self-retrieval verification for the Dundo matching pipeline.
 
-For each iTunes Tier-1 track in the catalog: download the actual Apple
-preview audio that was used to build the catalog embedding, POST it back
-to /neighbors as a fresh query, and check that the same track is returned
-at rank 1 with high cosine similarity.
+For each Creative-Commons Jamendo track with a persisted preview/audio URL:
+download the same source audio used to build the catalog embedding, POST it
+back to /neighbors as a fresh query, and check that the same track returns at
+rank 1 with high cosine similarity.
 
 This is the falsifiable answer to "are the matches accurate?" — if the
 self-retrieval rate is high, the encoder + retrieval pipeline are doing
@@ -18,7 +18,7 @@ Usage:
     python -m backend.scripts.verify_matching --base-url http://localhost:8000
 
     # Just one target:
-    python -m backend.scripts.verify_matching --target tier1:itunes:1488408568
+    python -m backend.scripts.verify_matching --target tier2:jamendo:773
 
 ADR-0002 §"Verification" documents the methodology this harness implements.
 """
@@ -36,7 +36,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CORPUS = REPO_ROOT / "quality-scorer" / "public" / "corpus" / "corpus.json"
 DEFAULT_BASE_URL = "https://rajata98-dundo.hf.space"
-APPLE_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+HTTP_UA = "Dundo self-retrieval verifier/1.0"
 
 
 def main() -> int:
@@ -44,7 +44,7 @@ def main() -> int:
     catalog = _load_catalog(args.corpus)
     targets = _select_targets(catalog, args.target)
     if not targets:
-        print("[verify_matching] no Tier-1 iTunes targets found in catalog; aborting", file=sys.stderr)
+        print("[verify_matching] no Jamendo targets with audio URLs found in catalog; aborting", file=sys.stderr)
         return 2
     print(f"[verify_matching] running against {args.base_url}")
     print(f"[verify_matching] {len(targets)} target(s) to verify")
@@ -86,18 +86,15 @@ def main() -> int:
 
 
 def _verify_one(target: dict, base_url: str, timeout: float) -> dict:
-    preview_url = (target.get("external_ids") or {}).get("previewUrl")
+    preview_url = _audio_url_for_target(target)
     if not preview_url:
-        raise RuntimeError("no previewUrl in catalog entry")
+        raise RuntimeError("no Jamendo audio URL in catalog entry")
 
-    # Download the iTunes preview. Apple CDN rejects default Python UA so set Safari.
-    req = urllib.request.Request(preview_url, headers={"User-Agent": APPLE_UA})
+    req = urllib.request.Request(preview_url, headers={"User-Agent": HTTP_UA})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         audio_bytes = r.read()
 
-    # POST to /neighbors. The temp file's .m4a suffix preserves Apple's AAC-LC
-    # format so the backend's audioread fallback picks the right decoder.
-    with tempfile.NamedTemporaryFile(suffix=".m4a", delete=True) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=True) as tmp:
         tmp.write(audio_bytes)
         tmp.flush()
         try:
@@ -111,7 +108,7 @@ def _verify_one(target: dict, base_url: str, timeout: float) -> dict:
                 resp = client.post(
                     f"{base_url}/neighbors",
                     params={"k": 5},
-                    files={"file": (f"{target['track_id']}.m4a", f, "audio/mp4")},
+                    files={"file": (f"{target['track_id']}.mp3", f, "audio/mpeg")},
                 )
         resp.raise_for_status()
         body = resp.json()
@@ -203,10 +200,23 @@ def _load_catalog(path: Path) -> list[dict]:
 
 
 def _select_targets(catalog: list[dict], target_id: str | None) -> list[dict]:
-    tier1 = [t for t in catalog if t.get("source") == "itunes" and (t.get("external_ids") or {}).get("previewUrl")]
+    targets = [
+        t for t in catalog
+        if t.get("source") == "jamendo" and _audio_url_for_target(t)
+    ]
     if target_id:
-        return [t for t in tier1 if t.get("track_id") == target_id]
-    return tier1
+        return [t for t in targets if t.get("track_id") == target_id]
+    return targets
+
+
+def _audio_url_for_target(target: dict) -> str | None:
+    ext = target.get("external_ids") or {}
+    return (
+        ext.get("jamendoAudioUrl")
+        or ext.get("audio")
+        or target.get("previewUrl")
+        or target.get("audioUrl")
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -216,7 +226,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--base-url", default=DEFAULT_BASE_URL,
                    help=f"backend base URL (default: {DEFAULT_BASE_URL})")
     p.add_argument("--target", default=None,
-                   help="single track_id to verify (default: all Tier-1 iTunes tracks)")
+                   help="single track_id to verify (default: all Jamendo tracks with audio URLs)")
     p.add_argument("--timeout", type=float, default=120.0,
                    help="per-request timeout in seconds (default: 120)")
     p.add_argument("--sleep", type=float, default=1.0,
