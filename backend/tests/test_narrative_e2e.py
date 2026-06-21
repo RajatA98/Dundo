@@ -187,12 +187,12 @@ def test_e2e_generate_narrative_runs_on_rebuilt_context():
                 "side": "query",
                 "timestampRange": [20.0, 30.0],
                 "criterionIds": ["tempo", "key"],
-                "citedValues": {
-                    "tempo.queryValue": 100.0,
-                    "tempo.matchValue": 100.5,
-                    "key.matchValue": "C major",
-                    "rawCosine": 0.881,
-                },
+                "citedValues": [
+                    {"name": "tempo.queryValue", "value": 100.0},
+                    {"name": "tempo.matchValue", "value": 100.5},
+                    {"name": "key.matchValue", "value": "C major"},
+                    {"name": "rawCosine", "value": 0.881},
+                ],
             }
         ],
     }

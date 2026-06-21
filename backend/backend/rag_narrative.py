@@ -22,7 +22,7 @@ CriterionId = Literal["tempo", "key", "harmonic", "timbre"]
 RESPONSE_SCHEMA_VERSION = "v1"
 CRITERIA_ALGORITHM_VERSION = "adr-0004-v1"
 MAX_PROMPT_CHARS = 8000
-MAX_COMPLETION_TOKENS = 400
+MAX_COMPLETION_TOKENS = 1000
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +47,23 @@ class NarrativeContext(BaseModel):
     acrcloudCoverSongId: dict | None
 
 
+class CitedValue(BaseModel):
+    # A single grounded value the narrative cites. Modeled as a fixed-shape
+    # {name, value} object (not an open dict) so the response schema is
+    # OpenAI-strict-compatible — strict mode forbids open `additionalProperties`.
+    # `name` is e.g. "tempo.queryValue", "key.matchValue", or "rawCosine".
+    name: str
+    value: float | str
+
+
 class StructuredCitation(BaseModel):
     trackId: str
     side: Literal["query", "match"]
-    timestampRange: tuple[float, float]
+    # list[float] (not tuple) so the schema is `array of number` — strict mode
+    # rejects the prefixItems/minItems/maxItems that a tuple type generates.
+    timestampRange: list[float]
     criterionIds: list[CriterionId]
-    citedValues: dict[str, float | str]
+    citedValues: list[CitedValue]
 
 
 class NarrativeResponse(BaseModel):
@@ -80,20 +91,22 @@ NarrativeResult = Union[NarrativeResponse, LowConfidence, NarrativeUnavailable]
 
 SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
     "whySimilar": (
-        "You are Dundo, an expert assistant explaining acoustic similarity "
-        "between music tracks. You receive structured metadata about two audio "
-        "segments. You do not hear the audio. You do not determine copyright "
-        "infringement, ownership, or legal status. Cite only tracks, criteria, "
-        "and values present in the supplied context. Output a single JSON object "
-        "matching the schema. No additional text, no markdown."
+        "You are Dundo, a warm music-discovery assistant explaining why this "
+        "artist resonates with what you made. You receive structured metadata "
+        "about the uploaded audio and a matched catalog artist; you do not hear "
+        "the audio. Ground the explanation in the supplied tempo, key, harmonic, "
+        "and timbre evidence. Cite only tracks, criteria, and values present in "
+        "the supplied context. Output a single JSON object matching the schema. "
+        "No additional text, no markdown."
     ),
     "creatorAdvice": (
-        "You are Dundo, an expert assistant helping creators make a music "
-        "generation more distinctive from a retrieved catalog match. You receive "
-        "structured metadata about two audio segments. You do not hear the audio. "
-        "You do not determine copyright infringement, ownership, or legal status. "
-        "Cite only tracks, criteria, and values present in the supplied context. "
-        "Output a single JSON object matching the schema. No additional text, no markdown."
+        "You are Dundo, a warm music-discovery assistant helping creators make "
+        "their upload feel more distinctive from a matched catalog artist. You "
+        "receive structured metadata about the uploaded audio and the artist "
+        "match; you do not hear the audio. Ground every suggestion in the "
+        "supplied tempo, key, harmonic, and timbre evidence. Cite only tracks, "
+        "criteria, and values present in the supplied context. Output a single "
+        "JSON object matching the schema. No additional text, no markdown."
     ),
 }
 
@@ -110,16 +123,16 @@ Return JSON with exactly this shape:
       "side": "query|match",
       "timestampRange": [start_seconds, end_seconds],
       "criterionIds": ["tempo|key|harmonic|timbre"],
-      "citedValues": {{
-        "<criterionId>.queryValue": "exact supplied value when cited",
-        "<criterionId>.matchValue": "exact supplied value when cited",
-        "rawCosine": 0.0
-      }}
+      "citedValues": [
+        {{"name": "<criterionId>.queryValue", "value": "exact supplied value when cited"}},
+        {{"name": "<criterionId>.matchValue", "value": "exact supplied value when cited"}},
+        {{"name": "rawCosine", "value": 0.0}}
+      ]
     }}
   ]
 }}
 
-Use the supplied context only. For creatorAdvice, write three concrete suggestion-style clauses in prose, each tied to a cited criterion.
+Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made. For creatorAdvice, write three concrete suggestion-style clauses in prose, each tied to a cited criterion.
 
 Context:
 {context_json}
@@ -249,7 +262,7 @@ def _call_openai_json(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            response_format={"type": "json_object"},
+            response_format=_response_format_json_schema(),
             max_tokens=max_tokens,
             temperature=0,
         )
@@ -284,6 +297,8 @@ def _build_user_prompt(context: NarrativeContext, mode: NarrativeMode) -> str:
         "trackId": context.trackId,
         "title": context.title,
         "artist": context.artist,
+        "matchedArtist": context.artist,
+        "matchedTrackTitle": context.title,
         "queryWindow": list(context.queryWindow),
         "matchWindow": list(context.matchWindow),
         "rawCosine": round(float(context.rawCosine), 3),
@@ -314,7 +329,7 @@ def _criterion_for_cache(criterion: CriterionContext) -> dict[str, Any]:
 def _round_numbers(value: Any) -> Any:
     if isinstance(value, bool):
         return value
-    if isinstance(value, int | float):
+    if isinstance(value, (int, float)):
         return round(float(value), 3)
     if isinstance(value, list):
         return [_round_numbers(v) for v in value]
@@ -337,7 +352,8 @@ def _citations_are_grounded(citations: list[StructuredCitation], context: Narrat
             return False
         if not _timestamp_is_grounded(citation, context):
             return False
-        for key, cited_value in citation.citedValues.items():
+        for cited in citation.citedValues:
+            key, cited_value = cited.name, cited.value
             if key == "rawCosine":
                 if not _numeric_close(cited_value, context.rawCosine, tolerance=0.01):
                     return False
@@ -385,3 +401,32 @@ def _prompt_template_hash(mode: NarrativeMode) -> str:
 def _sha256_json(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _response_format_json_schema() -> dict[str, Any]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "dundo_narrative_response",
+            "strict": True,
+            "schema": _strict_json_schema(NarrativeResponse.model_json_schema()),
+        },
+    }
+
+
+def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Make Pydantic's schema acceptable for OpenAI strict structured outputs."""
+    def visit(node: Any) -> Any:
+        if isinstance(node, list):
+            return [visit(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+
+        out = {key: visit(value) for key, value in node.items()}
+        if "properties" in out:
+            properties = out.get("properties") or {}
+            out["additionalProperties"] = False
+            out["required"] = sorted(properties)
+        return out
+
+    return visit(schema)

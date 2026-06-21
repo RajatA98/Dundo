@@ -71,12 +71,24 @@
               "tempo",
               "key"
             ],
-            "citedValues": {
-              "tempo.queryValue": 100.0,
-              "tempo.matchValue": 100.5,
-              "key.matchValue": "C major",
-              "rawCosine": 0.881
-            }
+            "citedValues": [
+              {
+                "name": "tempo.queryValue",
+                "value": 100.0
+              },
+              {
+                "name": "tempo.matchValue",
+                "value": 100.5
+              },
+              {
+                "name": "key.matchValue",
+                "value": "C major"
+              },
+              {
+                "name": "rawCosine",
+                "value": 0.881
+              }
+            ]
           }
         ]
       },
@@ -144,9 +156,12 @@
               "tempo",
               "timbre"
             ],
-            "citedValues": {
-              "tempo.matchValue": 171.0
-            }
+            "citedValues": [
+              {
+                "name": "tempo.matchValue",
+                "value": 171.0
+              }
+            ]
           }
         ]
       },
@@ -222,9 +237,12 @@
               "harmonic",
               "timbre"
             ],
-            "citedValues": {
-              "rawCosine": 0.79
-            }
+            "citedValues": [
+              {
+                "name": "rawCosine",
+                "value": 0.79
+              }
+            ]
           }
         ]
       },
@@ -377,9 +395,12 @@
             "criterionIds": [
               "tempo"
             ],
-            "citedValues": {
-              "tempo.queryValue": 100.0
-            }
+            "citedValues": [
+              {
+                "name": "tempo.queryValue",
+                "value": 100.0
+              }
+            ]
           }
         ]
       },
@@ -431,9 +452,12 @@
             "criterionIds": [
               "tempo"
             ],
-            "citedValues": {
-              "tempo.queryValue": 100.0
-            }
+            "citedValues": [
+              {
+                "name": "tempo.queryValue",
+                "value": 100.0
+              }
+            ]
           }
         ]
       },
@@ -485,9 +509,12 @@
             "criterionIds": [
               "tempo"
             ],
-            "citedValues": {
-              "tempo.queryValue": 130.0
-            }
+            "citedValues": [
+              {
+                "name": "tempo.queryValue",
+                "value": 130.0
+              }
+            ]
           }
         ]
       },
@@ -539,9 +566,12 @@
             "criterionIds": [
               "tempo"
             ],
-            "citedValues": {
-              "tempo.queryValue": 100.0
-            }
+            "citedValues": [
+              {
+                "name": "tempo.queryValue",
+                "value": 100.0
+              }
+            ]
           }
         ]
       },
@@ -687,12 +717,24 @@
               "tempo",
               "key"
             ],
-            "citedValues": {
-              "tempo.queryValue": 92.0,
-              "tempo.matchValue": 92.5,
-              "key.matchValue": "F minor",
-              "rawCosine": 0.862
-            }
+            "citedValues": [
+              {
+                "name": "tempo.queryValue",
+                "value": 92.0
+              },
+              {
+                "name": "tempo.matchValue",
+                "value": 92.5
+              },
+              {
+                "name": "key.matchValue",
+                "value": "F minor"
+              },
+              {
+                "name": "rawCosine",
+                "value": 0.862
+              }
+            ]
           }
         ]
       },
@@ -744,9 +786,12 @@
             "criterionIds": [
               "timbre"
             ],
-            "citedValues": {
-              "timbre.queryValue": 0.5
-            }
+            "citedValues": [
+              {
+                "name": "timbre.queryValue",
+                "value": 0.5
+              }
+            ]
           }
         ]
       },

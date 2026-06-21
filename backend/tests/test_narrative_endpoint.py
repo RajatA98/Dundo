@@ -80,9 +80,9 @@ def _install_rag_narrative_stub():
     class StructuredCitation(BaseModel):
         trackId: str
         side: Literal["query", "match"]
-        timestampRange: tuple[float, float]
+        timestampRange: list[float]
         criterionIds: list[CriterionId]
-        citedValues: dict[str, float | str]
+        citedValues: list[dict]
 
     class NarrativeResponse(BaseModel):
         kind: Literal["narrative"] = "narrative"
@@ -319,7 +319,7 @@ def test_valid_token_returns_narrative(configured_env):
                 side="query",
                 timestampRange=(20.0, 30.0),
                 criterionIds=["tempo"],
-                citedValues={"tempo.queryValue": 100.0},
+                citedValues=[{"name": "tempo.queryValue", "value": 100.0}],
             )
         ],
     )
@@ -392,7 +392,7 @@ def test_stats_endpoint_returns_telemetry_snapshot(configured_env):
                 side="query",
                 timestampRange=(20.0, 30.0),
                 criterionIds=["tempo"],
-                citedValues={"tempo.queryValue": 100.0},
+                citedValues=[{"name": "tempo.queryValue", "value": 100.0}],
             )
         ],
     )

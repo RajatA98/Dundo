@@ -15,9 +15,9 @@ from backend.rag_narrative import (
 def _context(*, criteria: list[CriterionContext] | None = None) -> NarrativeContext:
     return NarrativeContext(
         queryFingerprint="a" * 64,
-        trackId="tier1:itunes:380907765",
-        title="Take On Me",
-        artist="a-ha",
+        trackId="tier2:jamendo:380907765",
+        title="Small Hours",
+        artist="Maya Lev",
         queryWindow=(20.0, 30.0),
         matchWindow=(10.0, 20.0),
         rawCosine=0.8812,
@@ -61,19 +61,48 @@ def _valid_payload(mode: str = "whySimilar") -> dict:
         ),
         "citations": [
             {
-                "trackId": "tier1:itunes:380907765",
+                "trackId": "tier2:jamendo:380907765",
                 "side": "query",
                 "timestampRange": [20.0, 30.0],
                 "criterionIds": ["tempo", "key"],
-                "citedValues": {
-                    "tempo.queryValue": 100.0,
-                    "tempo.matchValue": 100.5,
-                    "key.matchValue": "C major",
-                    "rawCosine": 0.881,
-                },
+                "citedValues": [
+                    {"name": "tempo.queryValue", "value": 100.0},
+                    {"name": "tempo.matchValue", "value": 100.5},
+                    {"name": "key.matchValue", "value": "C major"},
+                    {"name": "rawCosine", "value": 0.881},
+                ],
             }
         ],
     }
+
+
+class _Message:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class _Choice:
+    def __init__(self, content: str) -> None:
+        self.message = _Message(content)
+
+
+class _Response:
+    def __init__(self, content: str) -> None:
+        self.choices = [_Choice(content)]
+
+
+class _Completions:
+    def __init__(self) -> None:
+        self.kwargs = None
+
+    def create(self, **kwargs):
+        self.kwargs = kwargs
+        return _Response('{"kind":"narrative","mode":"whySimilar","prose":"ok","citations":[]}')
+
+
+class _Client:
+    def __init__(self) -> None:
+        self.chat = type("Chat", (), {"completions": _Completions()})()
 
 
 def test_valid_narrative_passes() -> None:
@@ -92,6 +121,44 @@ def test_valid_narrative_passes() -> None:
     assert result.prose
     assert len(result.citations) >= 1
     call.assert_called_once()
+
+
+def test_openai_call_uses_strict_json_schema_and_larger_token_budget() -> None:
+    client = _Client()
+
+    payload = rag_narrative._call_openai_json(
+        client,
+        system_prompt="system",
+        user_prompt="user",
+        max_tokens=rag_narrative.MAX_COMPLETION_TOKENS,
+        model_id="gpt-4o-mini",
+    )
+
+    kwargs = client.chat.completions.kwargs
+    assert payload["kind"] == "narrative"
+    assert rag_narrative.MAX_COMPLETION_TOKENS >= 1000
+    assert kwargs["response_format"]["type"] == "json_schema"
+    schema_payload = kwargs["response_format"]["json_schema"]
+    assert schema_payload["strict"] is True
+    assert schema_payload["schema"]["additionalProperties"] is False
+    assert set(schema_payload["schema"]["required"]) == {"kind", "mode", "prose", "citations"}
+    # citedValues is now a list of fixed-shape {name,value} objects (not an open
+    # dict) so the schema is OpenAI-strict-valid. See test_strict_schema.py.
+    cited_values_schema = schema_payload["schema"]["$defs"]["StructuredCitation"]["properties"]["citedValues"]
+    assert cited_values_schema["type"] == "array"
+
+
+def test_prompt_is_artist_framed_discovery_voice() -> None:
+    ctx = _context()
+    prompt = rag_narrative._build_user_prompt(ctx, "whySimilar")
+    system = rag_narrative.SYSTEM_PROMPTS["whySimilar"]
+
+    assert "why this artist resonates with what you made" in system
+    assert "Maya Lev" in prompt
+    assert "matchedArtist" in prompt
+    assert "copyright" not in system.casefold()
+    assert "legal" not in system.casefold()
+    assert "risk" not in system.casefold()
 
 
 def test_malformed_llm_json_returns_unavailable() -> None:
