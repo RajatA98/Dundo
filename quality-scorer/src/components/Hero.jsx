@@ -1,51 +1,40 @@
 /**
- * Hero — kicker + tagline + subhead, center-aligned.
- *
- * The h1 tagline is locked verbatim (Richard Hendricks' original pilot
- * pitch, lightly modernized — see CLAUDE_UI_DESIGN_PROMPT.md). Don't
- * paraphrase.
+ * Hero — the violet-free, cool teal→indigo signature band (Dundo's one
+ * gradient). Tagline locked: "Upload an AI track. Find the indie artists
+ * it resonates with." Full-bleed; text constrained to a centered column.
  */
 export default function Hero() {
   return (
-    <header
-      className="border-b py-16 text-center"
-      style={{ borderColor: 'var(--color-line)' }}
-    >
-      <span
-        className="block font-mono text-[11px] uppercase"
-        style={{
-          color: 'var(--color-faint)',
-          letterSpacing: '0.18em',
-          marginBottom: '24px',
-        }}
-      >
-        Acoustic-similarity scanner for AI-generated music
-      </span>
-      <h1
-        className="mx-auto text-balance"
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: '48px',
-          lineHeight: 1.08,
-          letterSpacing: '-0.025em',
-          fontWeight: 600,
-          maxWidth: '16ch',
-          margin: '0 auto 16px',
-          color: 'var(--color-ink)',
-        }}
-      >
-        Find out if your AI-generated track resembles anything that&rsquo;s come before.
-      </h1>
-      <p
-        className="mx-auto text-pretty leading-relaxed"
-        style={{
-          fontSize: '18px',
-          color: 'var(--color-dim)',
-          maxWidth: '60ch',
-        }}
-      >
-        Drop in a Suno or Udio output. We embed the audio, compare it against a hand-curated catalog of real songs, and tell you which three you&rsquo;re closest to.
-      </p>
-    </header>
+    <section style={{ background: 'linear-gradient(150deg, #0c8f86, #3A57D6)', padding: '84px 28px 124px' }}>
+      <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center', color: '#ffffff' }}>
+        <div
+          style={{
+            fontSize: 12.5,
+            fontWeight: 600,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.82)',
+            marginBottom: 22,
+          }}
+        >
+          Discovery for AI-music creators
+        </div>
+        <h1
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 500,
+            fontSize: 47,
+            lineHeight: 1.1,
+            letterSpacing: '-0.015em',
+            margin: '0 0 22px',
+          }}
+        >
+          Upload an AI track. Find the indie artists it resonates with.
+        </h1>
+        <p style={{ fontSize: 17.5, lineHeight: 1.55, color: 'rgba(255,255,255,0.88)', margin: '0 auto', maxWidth: 560 }}>
+          Drop a track you made with Suno or Udio — meet the real indie artists who sound like it, and give them a listen.
+        </p>
+      </div>
+    </section>
   )
 }
