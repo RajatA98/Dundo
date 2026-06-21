@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 import time
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 from pydantic import BaseModel, ValidationError
 
@@ -72,7 +72,10 @@ class NarrativeUnavailable(BaseModel):
     reason: str
 
 
-NarrativeResult = NarrativeResponse | LowConfidence | NarrativeUnavailable
+# Runtime type alias — use Union[] (not the `X | Y` operator) so this module
+# imports on Python 3.9+; `from __future__ import annotations` does not cover
+# runtime expressions like this. (Fixes run_rag_eval TypeError on 3.9.)
+NarrativeResult = Union[NarrativeResponse, LowConfidence, NarrativeUnavailable]
 
 
 SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
