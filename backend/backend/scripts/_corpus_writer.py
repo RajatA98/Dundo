@@ -11,8 +11,11 @@ Files:
   - manifest.json         locked schema — see write_manifest() below
   - examples.json         3–5 staged precomputed query responses
 
-Apple rule (Tier-1 only): we NEVER write the preview audio bytes anywhere.
-Only the embedding + iTunes metadata + the `previewUrl` itself is persisted.
+Note: we NEVER write preview/audio bytes anywhere — only the embedding +
+metadata + the source link are persisted. (The Tier-1/iTunes path that
+originally motivated this rule was retired in the Dundo fork; v1 is CC-only.
+The `tier`/`attribution_required`/`track_view_url` fields below are vestigial
+from that era and Phase 2 may retire them — see REVIEW_REPORT.md Minor #3.)
 """
 
 from __future__ import annotations
@@ -35,24 +38,22 @@ DEFAULT_OUT_DIR_FROM_REPO = Path("quality-scorer/public/corpus")
 
 @dataclass
 class CorpusTrack:
-    """Unified shape for both Tier-1 (iTunes) and Tier-2 (FMA/Jamendo) tracks.
-
-    Tier-1 entries set `tier="tier1"`, `attribution_required=True`, and fill
-    `track_view_url` with the iTunes Store deep-link. Tier-2 entries set
-    `tier="tier2"`, `attribution_required=False`, and fill `license_short` and
-    `source_url` with the FMA/Jamendo upstream link.
+    """Catalog track shape. v1 is CC-only (Jamendo); the Tier-1/iTunes fields
+    below are vestigial from the PiedPiper era and always take the Tier-2/CC
+    branch now (`tier="tier2"`, `attribution_required=False`, `license_short`
+    + `source_url` = the Jamendo upstream link). Phase 2 may retire them.
     """
 
-    track_id: str                     # repo-unique key, e.g. "tier1:itunes:1499378034"
-    tier: str                         # "tier1" or "tier2"
+    track_id: str                     # repo-unique key, e.g. "tier2:jamendo:382"
+    tier: str                         # always "tier2" in v1 (CC-only)
     title: str
     artist: str
     primary_genre: str | None
-    source: str                       # "itunes" | "fma" | "jamendo"
+    source: str                       # "jamendo" (v1); "fma" reserved for v2
     source_url: str                   # link out to original source page
-    track_view_url: str | None        # iTunes Store deep-link (Tier-1 only)
-    attribution_required: bool        # True for Tier-1; required by Apple Search API terms
-    license_short: str | None         # e.g. "Apple iTunes preview (promotional, attribution required)" or "CC BY 4.0"
+    track_view_url: str | None        # vestigial (was the iTunes deep-link)
+    attribution_required: bool        # vestigial; always False in v1
+    license_short: str | None         # e.g. "CC BY 4.0"
     artwork_url: str | None
     duration_ms: int | None
     external_ids: dict[str, Any] = field(default_factory=dict)

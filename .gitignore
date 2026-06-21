@@ -49,3 +49,11 @@ backend/eval_input/audio/
 # audits, eval results). The historical ones tracked from before this
 # rule landed stay tracked; new ones stay local.
 factory/artifacts/
+
+# Local-only Claude Code session guidance — stays on this machine, not a
+# tracked/public handoff surface (README.md is the tracked one).
+CLAUDE.md
+
+# Enrichment API response cache (enrich_spike) — local only
+.cache/
+backend/.cache/

@@ -1,4 +1,4 @@
-# PiedPiper HF Space — runtime deps. Torch is installed separately in the
+# Dundo HF Space — runtime deps. Torch is installed separately in the
 # Dockerfile from the CPU wheel index.
 fastapi>=0.115
 uvicorn[standard]>=0.32
@@ -11,7 +11,12 @@ tqdm>=4.66
 datasets>=3.0
 # ADR-0002: MuQ-MuLan audio encoder. ~700M params, CC-BY-NC 4.0.
 muq>=0.1
-# ACRCloud client (Phase 5) + YAML for any catalog rebuild from the container.
+# Phase 2 served retrieval backend (SIMILARITY_BACKEND=faiss). Without this,
+# api.py silently falls back to the NumPy sweep at full catalog scale.
+faiss-cpu>=1.8
+# Phase 2: hydrate the corpus from the HF Dataset repo into RAM at boot.
+huggingface_hub>=0.24
+# HTTP (enrichment/Jamendo) + YAML for catalog rebuild from the container.
 httpx>=0.27
 pyyaml>=6.0
 # Sentry error tracking — no-op when SENTRY_DSN env var is unset.
