@@ -1,4 +1,11 @@
-"""Read/write the static corpus assets the frontend serves."""
+"""Read/write the static corpus assets (current 145-track seed path).
+
+Phase-2 note (REVIEW_REPORT.md Minor #3): this is the *legacy* local-file corpus
+path. Phase 2 moves the served corpus to the HF Dataset repo (`RajatA98/dundo-corpus`)
+loaded into RAM at boot. The corpus *writer* used by the build pipeline is
+`scripts/_corpus_writer.py`; this module only handles local read/stats/examples
+helpers for the seed. Don't confuse the two when implementing Phase 2 storage.
+"""
 
 from __future__ import annotations
 

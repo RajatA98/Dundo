@@ -10,24 +10,23 @@ The name pairs deliberately with Suno: **suno** (सुनो) is Hindi for *lis
 
 ## What you get for an upload
 
-- **3–5 indie artists** ranked by acoustic similarity to your upload, retrieved via MuQ-MuLan's 512-d joint embedding space.
+- **The top 3 indie artists** ranked by acoustic similarity to your upload, retrieved via MuQ-MuLan's 512-d joint embedding space. Honest by default — if only one or two genuinely resonate, you see one or two, never padded to three.
 - **A short LLM-grounded "why this resonates with what you made"** paragraph per match — citing the exact tempo, key, and chord-palette evidence from the four-criterion MIR layer (ADR-0004), never hallucinated.
 - **A visible criteria comparison** (tempo / key / harmonic / timbre) per match.
 - **A side-by-side spectrogram view** of the matched 10-second window — for when you can't trust your ears alone.
-- **Direct support links** (Bandcamp / Spotify / Patreon) so the discovery turns into action.
-- **Coming soon**: live-show data via Bandsintown — see where the artists who resonate with your sound are playing.
+- **"Give them a listen"** — a direct link to the artist's own music (Jamendo / FMA / Bandcamp), plus support links, so the discovery turns into action and support flows to the human artist.
 
 ## Why Dundo, why now
 
 The licensing wall for commercial big-artist catalogs is real: a portfolio project that needs major-label rights to retrieve "the song that sounds like your AI generation" can't reach production scale. The Creative-Commons indie catalog *doesn't* have that wall. There are ~55K MTG-Jamendo and ~106K Free Music Archive tracks legally bulk-ingestible today. Dundo retrieves from that pool.
 
-The pivot also fixes the framing problem: a tool that says *"your AI track might be too close to this copyrighted song — risk verdict"* is defensive. A tool that says *"you generated music like this — meet the human artist whose sound resonates with what you made, and here's where they're playing"* is positive-sum. AI creator finds inspiration. Indie artist gets discovered. Local venue fills seats.
+The pivot also fixes the framing problem: a tool that says *"your AI track might be too close to this copyrighted song — risk verdict"* is defensive. A tool that says *"you generated music like this — meet the human artist whose sound resonates with what you made, and go give them a listen"* is positive-sum. AI creator finds inspiration. Indie artist gets discovered and supported. Dundo points listeners *toward* these artists — it never trains on them.
 
 ## Key engineering decision: the CLAP → MuQ-MuLan swap
 
 The system originally ran LAION-CLAP. The live demo surfaced a real failure: every match displayed at "100% / 100% / 100%" similarity, regardless of how close the underlying audio actually was. **Root cause was contrastive-encoder anisotropy** — the pairwise cosine distribution across the catalog clustered tightly (mean 0.967, std 0.030, top-vs-random discrimination ratio only 0.036), so the UI was forced to round all distinct matches to the same headline number. After researching the 2024-2026 audio embedding literature, the fix was to swap the encoder: LAION-CLAP → MuQ-MuLan (Tencent AI Lab, Jan 2025 SOTA on MagnaTagATune zero-shot). **The measured result on the full catalog: Recall@1 +62% (0.394 → 0.639), discrimination ratio 12× wider (0.036 → 0.451), mean random-pair cosine dropped from 0.967 to 0.456.** Both encoders' numbers are preserved in [ADR-0002](docs/decisions/0002-swap-clap-for-muq-mulan.md) so the decision stays auditable.
 
-**Independent verification.** The matching pipeline is checked end-to-end by `backend/backend/scripts/verify_matching.py` — for each catalog track, the script re-uploads its preview to `/neighbors` and asserts the same track is returned at rank 1 with cosine ≈ 1.0. Latest run: 10/10 self-retrieval at rank 1, mean self-cosine 0.9988.
+**Independent verification.** The matching pipeline is checked end-to-end by a self-retrieval harness — for each catalog track, re-encode its audio, query `/neighbors`, and assert the same track returns at rank 1 with cosine ≈ 1.0. (The original verifier was iTunes-preview-oriented; it is being replaced by a CC self-retrieval harness for the Jamendo/FMA catalog — see `factory/artifacts/PROJECT_PLAN.md`.)
 
 **Decomposed similarity.** One cosine doesn't defend "similar." [ADR-0004](docs/decisions/0004-multi-criterion-similarity.md) adds four classical MIR criteria — tempo, key+mode, harmonic content (chroma), timbre (MFCC) — surfaced per neighbor with a per-criterion agreement score and label ("same key," "4 BPM apart," "similar production feel"). Math is librosa-native, no new dependencies. The criteria layer is additive — top-K ordering still comes from MuQ-MuLan cosine.
 
@@ -85,23 +84,23 @@ The catalog is built offline by `python -m backend.scripts.rebuild_corpus`, whic
 
 ## Why these technical choices
 
-**Audio embedding model: MuQ-MuLan 512-d** (`OpenMuQ/MuQ-MuLan-large`, Tencent AI Lab, January 2025 SOTA on MagnaTagATune zero-shot). CC-BY-NC 4.0 (non-commercial portfolio use), ~700M parameters, ~0.8 s per 10-second window on CPU. The encoder also has a text branch — Dundo uses it for zero-shot genre tagging and for the style-attribution fallback ("sounds like vintage crooner / 80s synth-pop") when no catalog match crosses threshold.
+**Audio embedding model: MuQ-MuLan 512-d** (`OpenMuQ/MuQ-MuLan-large`, Tencent AI Lab, January 2025 SOTA on MagnaTagATune zero-shot). CC-BY-NC 4.0 (non-commercial portfolio use), ~700M parameters, ~0.8 s per 10-second window on CPU. (LAION-CLAP — permissive, ~tied on similarity — is the documented swap for any commercial future.) The encoder also has a text branch, used for zero-shot genre tagging.
 
-**Vector search: in-memory NumPy cosine sweep.** At the current catalog size a sweep is sub-millisecond. FAISS Flat is wired behind `SIMILARITY_BACKEND=faiss` and becomes the right call ~10K tracks (measured in `backend/backend/scripts/bench_similarity.py`). LanceDB or Qdrant become the right call ~100K+ tracks. The ladder is climbable; the climb has trigger conditions, not preemptive complexity.
+**Vector search: FAISS Flat (exact).** At the v1 catalog of ~160K tracks the full embedding set is only ~328 MB, so exact Flat search is both correct and cheap — no approximate index or heavyweight vector DB (LanceDB/Qdrant/Pinecone) earns its keep until ~1M vectors. (The 145-track seed runs an in-memory NumPy sweep; FAISS Flat behind `SIMILARITY_BACKEND=faiss` is the served path at full scale; crossover measured in `bench_similarity.py`.) Embeddings live in a Hugging Face Dataset repo and load into the Space's RAM at boot. The ladder is climbable; the climb has trigger conditions, not preemptive complexity.
 
 **Backend hosting: Hugging Face Space CPU Basic (free).** Cultural signal aside, the 48-hour sleep is mitigated by a daily UptimeRobot ping to `/health`. Modal is the documented migration target when cold starts ever degrade the reviewer experience.
 
 **Track-length normalization: 10-second windows, L2-normalized mean pooling.** Catalog previews are 30 s (3 windows); uploaded queries are capped at 90 s (up to 9 windows). The response surfaces both `meanPooledSimilarity` (the headline rank) and `maxSegmentSimilarity` (local resemblance the mean would wash out).
 
-**Single threshold for "completely unique"** (provisional `0.70`), recalibrated from the observed top-1 cosine distribution on the negatives in the golden set. Above threshold → discovery card with artist + narrative. Below threshold → style-attribution fallback ("sounds like vintage crooner / 80s synth-pop") via the same MuQ-MuLan text branch.
+**Single threshold for a close match** (provisional `0.70`), recalibrated from the observed top-1 cosine distribution on the negatives in the golden set. Above threshold → discovery card with artist + narrative + listen/support. Below threshold → an honest "nothing in the catalog is a close match yet" — no padding, no style-attribution fallback.
 
 ## Rights and catalog
 
-The catalog is **Creative-Commons licensed indie music**. Today's seed is ~145 tracks from MTG-Jamendo (Phase 1 ingest); the planned expansion targets ~10K then 50K+ via MTG-Jamendo's full 55K + Free Music Archive's 106K. Both datasets allow bulk audio download for research + non-commercial use; each match links out to the artist's Jamendo / FMA / Bandcamp page so users can act on the discovery.
+The catalog is **Creative-Commons licensed indie music**. Today's seed is ~145 tracks from MTG-Jamendo; v1 ingests the **full MTG-Jamendo (~55K) + Free Music Archive (~106K) ≈ 160K tracks** in one pass. Both datasets allow bulk audio download for research + non-commercial use; each match links out to the artist's Jamendo / FMA / Bandcamp page so users can give them a listen and support them.
 
 There is no commercial-catalog ingestion. There is no Apple iTunes Tier-1 anymore — that was a PiedPiper-era demo aid retired in the pivot to keep the licensing story clean. There is no ACRCloud — also retired; Dundo's thesis is discovery, not commercial-second-opinion copyright detection.
 
-The companion question — *will the system's verdict survive when the catalog is 10⁷ tracks instead of 145?* — is answered in [ADR-0003: density-relative calibration](docs/decisions/0003-catalog-scale-calibration.md). The mechanism is argued, not proven at scale; the ADR is honest about that.
+The companion question — *will the matches hold up when the catalog is 10⁷ tracks instead of 145?* — is answered in [ADR-0003: density-relative calibration](docs/decisions/0003-catalog-scale-calibration.md). The mechanism is argued, not proven at scale; the ADR is honest about that.
 
 ## What Dundo deliberately does NOT do
 
@@ -111,17 +110,17 @@ The companion question — *will the system's verdict survive when the catalog i
 - **No commercial-catalog ingestion.** CC + public-domain only.
 - **No multi-modal LLM ingest of raw audio.** The LLM receives structured metadata only.
 - **No user accounts or persistence.** Stateless demo.
-- **No "near you" geographic personalization in v1.** Artist's city is shown; user-location-based filtering is a later iteration.
-- **No premature scaling climb.** NumPy retrieval until measured pressure justifies FAISS Flat (~10K tracks).
+- **No live shows in v1.** The "where are they playing" row was retired in presearch — Bandsintown's API blocks third-party discovery use, coverage for CC artists is ~2–8%, and Spotify has no concerts API. The action layer is "give them a listen" + support links instead. Live shows are a v2 ambition.
+- **No "near you" geographic personalization in v1.** An artist's city is shown when known; location-based filtering is a v2 iteration.
+- **No premature scaling climb.** FAISS Flat (exact) serves the 160K catalog; no heavier vector DB until ~1M vectors.
 
 ## Roadmap
 
-- **Bandsintown integration** — add live-show data ("Maya Lev plays The Bowery in Brooklyn next Thursday") behind a `BANDSINTOWN_APP_ID` secret. Nullable: cards without show data just don't render that row.
-- **Style attribution row in Case B** — when no catalog match crosses threshold, render "sounds like vintage crooner / 80s synth-pop / lo-fi hip-hop" using the MuQ-MuLan text branch over a curated vocabulary.
-- **Catalog scale to ~10K then ~50K+** via full MTG-Jamendo + FMA bulk ingest. The FAISS Flat backend is wired and waiting.
+- **Live-show discovery (v2)** — "where is this artist playing next." Retired from v1 on data/licensing grounds (Bandsintown's API blocks third-party discovery use; Spotify has no concerts API), but it's the natural v2 — and on-thesis, since Suno acquired Songkick (Nov 2025) to build exactly this "creation-to-discovery" loop.
+- **"Near me" filtering (v2)** — once shows exist, filter discoveries to the user's city so "give them a listen" can become "go see them this week."
 - **Strict `response_format=json_schema`** in the narrative call (currently `json_object`; planned tightening to eliminate the residual Pydantic-validation failures from GPT-4o-mini's looser output mode).
 
-See `factory/artifacts/PIVOT_PRD.md` for the full product spec.
+See `factory/artifacts/PRD.md` for the v1 product spec and `factory/artifacts/PROJECT_PLAN.md` for the build plan.
 
 ## Evaluation
 
@@ -192,8 +191,7 @@ Then in the Space's **Settings → Variables and secrets**:
 - `OPENAI_API_KEY` (secret) — powers the `/narrative` RAG explanatory layer. Without it, `/narrative` returns `503 narrative-disabled` and the frontend tabs show a typed fallback panel; `/neighbors` is unaffected.
 - `CONTEXT_TOKEN_HMAC_KEY` (secret) — signs the opaque `contextToken` `/neighbors` attaches. Generate with `openssl rand -hex 32`.
 - `OPENAI_MODEL_ID` (optional variable) — defaults to `gpt-4o-mini`.
-- `SIMILARITY_BACKEND` (optional variable) — `numpy` (default) or `faiss` to enable the FAISS Flat backend.
-- `BANDSINTOWN_APP_ID` (optional secret, coming) — enables the live-show row on each discovery card.
+- `SIMILARITY_BACKEND` (optional variable) — `numpy` (current seed default) or `faiss` for the FAISS Flat backend (the v1 served path at full catalog scale).
 
 First build takes ~8 min (pulls torch + MuQ weights). After it boots, hit `https://rajata98-dundo.hf.space/health` → `{"ok": true, "corpus": <N>, ...}`.
 
