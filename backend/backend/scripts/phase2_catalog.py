@@ -4,8 +4,8 @@ This module owns the local, testable pieces of the Jamendo-only v1 catalog
 build: source validation, quality-gate checkpoint manifests, artist metadata
 serialization, optional FAISS index writing, and HF Dataset checksum handling.
 
-The expensive MuQ encode still lives in ``rebuild_corpus.py``; these helpers
-make that job resumable and auditable before the cloud GPU run.
+The expensive MuQ encode is orchestrated by ``build_phase2_catalog.py``. These
+helpers keep that job resumable and auditable before and after the cloud GPU run.
 """
 
 from __future__ import annotations
@@ -115,6 +115,7 @@ def build_checkpoint_manifest(
             "trackId": f"tier2:jamendo:{track_id}" if track_id else None,
             "artist": artist,
             "title": _get(track, "title", default=None),
+            "primaryGenre": _get(track, "primary_genre", "primaryGenre", default=None),
             "sourceUrl": source_url,
             "audioUrl": audio_url,
             "license": license_short,
@@ -167,6 +168,26 @@ def write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
 
 
+def read_json(path: Path) -> Any:
+    return json.loads(path.read_text())
+
+
+def pending_manifest_items(
+    manifest: dict[str, Any],
+    *,
+    limit: int | None = None,
+) -> list[tuple[str, dict[str, Any]]]:
+    """Return pending manifest entries in stable order."""
+    items = [
+        (key, entry)
+        for key, entry in sorted((manifest.get("entries") or {}).items())
+        if entry.get("status") == STATUS_PENDING
+    ]
+    if limit is not None:
+        items = items[: max(0, int(limit))]
+    return items
+
+
 def serialize_artists(
     corpus_tracks: list[dict],
     enriched_records: dict[str, ArtistRecord] | None = None,
@@ -211,6 +232,93 @@ def build_faiss_flat_index(embeddings: np.ndarray, out_path: Path) -> None:
     index.add(arr)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     faiss.write_index(index, str(out_path))
+
+
+def artifact_file_hashes(out_dir: Path, file_names: Iterable[str]) -> dict[str, str]:
+    return {
+        name: compute_file_sha256(out_dir / name)
+        for name in sorted(file_names)
+        if (out_dir / name).exists()
+    }
+
+
+def write_phase2_manifest(
+    out_dir: Path,
+    checkpoint_manifest: dict[str, Any],
+    *,
+    model_id: str,
+    model_sha: str,
+    embedding_dim: int,
+    window_seconds: float,
+    query_max_seconds: float,
+    pooling: str,
+    threshold_default: float,
+    tier_counts: dict[str, int],
+    generated_at: str,
+    faiss_index: str = "faiss.index",
+) -> dict[str, Any]:
+    """Write the runtime manifest plus the full Phase-2 checkpoint state.
+
+    The API still needs the Phase-1 runtime fields (model id, threshold, file
+    hashes). Phase 2 additionally needs every candidate accounted for as
+    encoded/skipped/dead/error, so the checkpoint entries are embedded under
+    ``phase2``.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    file_names = [
+        "artists.json",
+        "corpus.json",
+        "embeddings.npy",
+        "examples.json",
+        faiss_index,
+        "segment_embeddings.npz",
+        "self_retrieval.json",
+    ]
+    file_hashes = artifact_file_hashes(out_dir, file_names)
+    combined = hashlib.sha256()
+    for name in sorted(file_hashes):
+        combined.update(name.encode("utf-8"))
+        combined.update(file_hashes[name].encode("ascii"))
+
+    manifest = {
+        "model_id": model_id,
+        "model_sha": model_sha,
+        "embedding_dim": embedding_dim,
+        "window_seconds": window_seconds,
+        "query_max_seconds": query_max_seconds,
+        "pooling": pooling,
+        "threshold_default": threshold_default,
+        "tier_counts": tier_counts,
+        "generated_at": generated_at,
+        "faiss_index": faiss_index,
+        "phase2": {
+            "schemaVersion": checkpoint_manifest.get("schemaVersion"),
+            "source": checkpoint_manifest.get("source"),
+            "generatedAt": checkpoint_manifest.get("generatedAt"),
+            "summary": checkpoint_manifest.get("summary"),
+            "entries": checkpoint_manifest.get("entries") or {},
+        },
+        "sha256": {
+            "files": file_hashes,
+            "combined": combined.hexdigest(),
+        },
+    }
+    write_json(out_dir / "manifest.json", manifest)
+    return manifest
+
+
+def publish_dataset_folder(out_dir: Path, repo_id: str, *, commit_message: str | None = None) -> str:
+    """Upload the built corpus folder to a Hugging Face Dataset repo."""
+    from huggingface_hub import HfApi
+
+    api = HfApi()
+    api.upload_folder(
+        folder_path=str(out_dir),
+        repo_id=repo_id,
+        repo_type="dataset",
+        commit_message=commit_message or "Publish Dundo Phase 2 Jamendo corpus",
+    )
+    return repo_id
 
 
 def compute_file_sha256(path: Path) -> str:

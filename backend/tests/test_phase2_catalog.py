@@ -3,10 +3,15 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+import numpy as np
 import pytest
 
 from backend.artist import ArtistRecord, SupportLink
+from backend import config
+from backend.scripts import build_phase2_catalog
 from backend.scripts.phase2_catalog import (
+    STATUS_DEAD_URL,
+    STATUS_ENCODED,
     STATUS_PENDING,
     STATUS_SKIPPED_DUPLICATE,
     STATUS_SKIPPED_LICENSE,
@@ -146,3 +151,81 @@ def test_verify_matching_selects_jamendo_audio_targets():
 
     assert [t["track_id"] for t in _select_targets(catalog, None)] == ["tier2:jamendo:2"]
     assert [t["track_id"] for t in _select_targets(catalog, "tier2:jamendo:2")] == ["tier2:jamendo:2"]
+
+
+def test_phase2_builder_encodes_pending_entries_and_marks_missing_audio(tmp_path):
+    manifest = build_checkpoint_manifest(
+        [
+            Candidate(
+                "1",
+                "A",
+                "One",
+                source_url="https://jamendo.com/track/1",
+                audio_path_or_url="https://audio.example/1.mp3",
+            ),
+            Candidate("2", "B", "Two", source_url="https://jamendo.com/track/2"),
+        ],
+        generated_at="2026-06-21T00:00:00+00:00",
+    )
+    audio_dir = tmp_path / "audio"
+    audio_dir.mkdir()
+    (audio_dir / "track_0000001.low.mp3").write_bytes(b"fake-audio")
+    manifest_path = tmp_path / "manifest.json"
+
+    vec = np.zeros(config.CLAP_EMBED_DIM, dtype=np.float32)
+    vec[0] = 1.0
+
+    def fake_decoder(_: bytes):
+        return np.ones(8, dtype=np.float32), 8000
+
+    def fake_encoder(_, __):
+        return vec, vec.reshape(1, -1)
+
+    tracks = build_phase2_catalog.encode_manifest_entries(
+        manifest,
+        audio_index=build_phase2_catalog.build_audio_index(audio_dir),
+        manifest_path=manifest_path,
+        encoder=fake_encoder,
+        decoder=fake_decoder,
+    )
+
+    assert [track.track_id for track in tracks] == ["tier2:jamendo:1"]
+    assert tracks[0].external_ids["jamendoAudioUrl"] == "https://audio.example/1.mp3"
+    assert manifest["entries"]["jamendo:1"]["status"] == STATUS_ENCODED
+    assert manifest["entries"]["jamendo:2"]["status"] == STATUS_DEAD_URL
+    assert json.loads(manifest_path.read_text())["summary"]["byStatus"] == {
+        STATUS_DEAD_URL: 1,
+        STATUS_ENCODED: 1,
+    }
+
+
+def test_phase2_builder_writes_runtime_artifacts_and_embeds_checkpoint(tmp_path, monkeypatch):
+    manifest = build_checkpoint_manifest(
+        [Candidate("1", "A", "One", source_url="https://jamendo.com/track/1")],
+        generated_at="2026-06-21T00:00:00+00:00",
+    )
+    vec = np.zeros(config.CLAP_EMBED_DIM, dtype=np.float32)
+    vec[0] = 1.0
+    track = build_phase2_catalog.corpus_track_from_manifest_entry(
+        manifest["entries"]["jamendo:1"],
+        vec,
+        vec.reshape(1, -1),
+    )
+    monkeypatch.setattr(build_phase2_catalog, "_resolve_model_sha", lambda: "test-sha")
+
+    build_phase2_catalog.write_dataset_artifacts(
+        tmp_path,
+        manifest,
+        [track],
+        enrich=False,
+        build_faiss=False,
+    )
+
+    assert (tmp_path / "corpus.json").exists()
+    assert (tmp_path / "artists.json").exists()
+    assert (tmp_path / "self_retrieval.json").exists()
+    manifest_json = json.loads((tmp_path / "manifest.json").read_text())
+    assert manifest_json["model_sha"] == "test-sha"
+    assert manifest_json["phase2"]["entries"]["jamendo:1"]["status"] == STATUS_PENDING
+    assert manifest_json["sha256"]["files"]["artists.json"]
+    assert json.loads((tmp_path / "self_retrieval.json").read_text())[0]["passed"] is True
