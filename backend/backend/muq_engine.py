@@ -30,13 +30,14 @@ from . import config
 
 _model: Any = None
 _genre_text_emb: np.ndarray | None = None
+_device: str = "cpu"  # set to "cuda" at load() when a GPU is available
 _load_lock = threading.Lock()
 _encode_lock = threading.Lock()
 
 
 def load() -> None:
     """Load MuQ-MuLan and cache the genre text embeddings. Idempotent + thread-safe."""
-    global _model, _genre_text_emb
+    global _model, _genre_text_emb, _device
     if _model is not None:
         return
     with _load_lock:
@@ -47,6 +48,12 @@ def load() -> None:
         from muq import MuQMuLan
 
         mdl = MuQMuLan.from_pretrained(config.AUDIO_ENCODER_MODEL_ID).eval()
+
+        # Move the model to the GPU when one is available. Without this MuQ runs
+        # on CPU (~5 s/track); on CUDA it's well under 1 s/track. The device is
+        # stored so encode_audio() can put input tensors on the same device.
+        _device = "cuda" if torch.cuda.is_available() else "cpu"
+        mdl = mdl.to(_device)
 
         # Pre-encode genre prompts once at startup. MuQ-MuLan is CLIP-style:
         # the text encoder produces 512-d L2-normalized embeddings in the
@@ -86,7 +93,7 @@ def encode_audio(wav_mono: np.ndarray, sr: int) -> np.ndarray:
     if sr != config.AUDIO_ENCODER_SAMPLE_RATE:
         wav = librosa.resample(wav, orig_sr=sr, target_sr=config.AUDIO_ENCODER_SAMPLE_RATE)
 
-    wavs = torch.from_numpy(wav).unsqueeze(0)  # shape (1, num_samples)
+    wavs = torch.from_numpy(wav).unsqueeze(0).to(_device)  # (1, num_samples), on GPU when available
     with _encode_lock, torch.no_grad():
         emb = _model(wavs=wavs)
     arr = emb.detach().cpu().numpy().astype(np.float32).reshape(-1)
