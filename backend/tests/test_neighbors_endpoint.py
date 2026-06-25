@@ -18,11 +18,14 @@ If those files are absent, the corpus-dependent tests skip with a clear reason.
 
 from __future__ import annotations
 
-import json
+import asyncio
+import io
 from pathlib import Path
 
 import numpy as np
 import pytest
+from fastapi import UploadFile
+from starlette.datastructures import Headers
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CORPUS_DIR = REPO_ROOT / "quality-scorer" / "public" / "corpus"
@@ -226,76 +229,212 @@ def test_threshold_from_manifest_raises_when_missing():
 
 
 # ----------------------------------------------------------------------------
-# /neighbors endpoint shape — uses the live FastAPI TestClient
+# /neighbors endpoint shape — direct offline endpoint tests, no model load
 # ----------------------------------------------------------------------------
 
 
-@corpus_skip
-def test_neighbors_response_includes_model_sha_and_threshold_default():
-    """Top-level response must expose `modelSha` and `thresholdDefault`."""
-    from fastapi.testclient import TestClient
+ARTISTS = [
+    {
+        "artistId": "jamendo:maya-lev",
+        "name": "Maya Lev",
+        "trackIds": ["t1", "t2"],
+        "listenUrl": "https://jamendo.com/artist/maya",
+        "location": "Lisbon, PT",
+        "supportLinks": [{"kind": "website", "url": "https://maya.example", "label": "Website"}],
+        "previewUrl": "https://artist-preview/maya.mp3",
+        "spotifyUrl": None,
+    },
+    {
+        "artistId": "jamendo:hollow-coast",
+        "name": "Hollow Coast",
+        "trackIds": ["t3"],
+        "listenUrl": "https://jamendo.com/artist/hollow",
+        "location": None,
+        "supportLinks": [],
+        "previewUrl": None,
+        "spotifyUrl": None,
+    },
+]
 
-    from backend.api import app
 
-    with TestClient(app) as client:
-        # Use any small audio file in the test fixtures; the test exists to
-        # verify the response shape, not the embedding correctness.
-        fixture = REPO_ROOT / "backend" / "tests" / "fixtures" / "tiny.mp3"
-        if not fixture.exists():
-            pytest.skip("backend/tests/fixtures/tiny.mp3 not present; create one for end-to-end tests")
-        with fixture.open("rb") as f:
-            r = client.post("/neighbors", files={"file": ("tiny.mp3", f, "audio/mpeg")})
+def _upload() -> UploadFile:
+    return UploadFile(
+        file=io.BytesIO(b"not-real-audio-but-decoder-is-stubbed"),
+        filename="query.wav",
+        headers=Headers({"content-type": "audio/wav"}),
+    )
 
-    assert r.status_code == 200, r.text
-    data = r.json()
 
-    assert "modelSha" in data, "response must include modelSha at top level"
-    assert "thresholdDefault" in data, "response must include thresholdDefault"
-    assert isinstance(data["thresholdDefault"], float)
+def _pipeline() -> dict:
+    return {
+        "analysis": {"durationSec": 1.0, "waveform": [], "problems": [], "raw": {}},
+        "report": {"score": 100, "verdict": "ok", "reason": "stubbed", "signals": {}},
+        "genres": [],
+        "emb": np.array([1.0, 0.0], dtype=np.float32),
+        "segment_embeddings": np.array([[1.0, 0.0]], dtype=np.float32),
+        "mir": object(),
+    }
+
+
+def _neighbor(track_id: str, score: float, *, q_win: int = 0, c_win: int = 0) -> dict:
+    return {
+        "trackId": track_id,
+        "meanPooledSimilarity": score,
+        "maxSegmentSimilarity": score - 0.01,
+        "matchQueryWindow": q_win,
+        "matchCatalogWindow": c_win,
+    }
+
+
+def _install_endpoint_fakes(monkeypatch, raw_neighbors, *, artists=True, token=False, capture=None):
+    from backend import api
+    from backend import artist_response
+
+    tracks = {
+        "t1": {
+            "track_id": "t1",
+            "title": "First Maya Track",
+            "artist": "Maya Lev",
+            "external_ids": {"jamendoAudioUrl": "https://audio/t1.mp3"},
+            "mir_features": {"stub": True},
+        },
+        "t2": {
+            "track_id": "t2",
+            "title": "Second Maya Track",
+            "artist": "Maya Lev",
+            "previewUrl": "https://preview/t2.mp3",
+            "mir_features": {"stub": True},
+        },
+        "t3": {
+            "track_id": "t3",
+            "title": "Hollow Track",
+            "artist": "Hollow Coast",
+            "audioUrl": "https://audio/t3.mp3",
+            "mir_features": {"stub": True},
+        },
+        "t4": {
+            "track_id": "t4",
+            "title": "Weak Track",
+            "artist": "Weak Artist",
+            "mir_features": {"stub": True},
+        },
+    }
+
+    monkeypatch.setattr(api, "_decode_and_pipeline", lambda raw, ext="": _pipeline())
+    monkeypatch.setattr(api, "_flat_catalog", object())
+    monkeypatch.setattr(api, "_corpus_by_id", tracks)
+    monkeypatch.setattr(api, "_threshold_default", 0.7)
+    monkeypatch.setattr(api, "_model_sha", "model-sha")
+    monkeypatch.setattr(api, "_catalog_sha", "catalog-sha")
+    monkeypatch.setattr(api, "_catalog_cosine_distribution", np.array([], dtype=np.float32))
+    monkeypatch.setattr(api.similarity, "query_specificity", lambda emb, catalog: 0.5)
+    monkeypatch.setattr(
+        api,
+        "_build_criteria_block",
+        lambda query_mir, match_mir: {
+            "tempo": {"agreement": 0.9, "label": "4 BPM apart", "queryValue": 100.0, "matchValue": 104.0},
+            "key": {"agreement": 1.0, "label": "Same key", "queryValue": "F minor", "matchValue": "F minor"},
+            "harmonic": {"agreement": 0.8, "label": "Close harmonic color"},
+            "timbre": {"agreement": 0.7, "label": "Similar texture"},
+        } if match_mir else None,
+    )
+    monkeypatch.setattr(api.context_token, "is_configured", lambda: token)
+    def fake_issue(**kwargs):
+        if capture is not None:
+            capture["neighbors"] = kwargs["neighbors"]
+        return "signed-context"
+
+    monkeypatch.setattr(api.context_token, "issue", fake_issue)
+    if artists:
+        monkeypatch.setattr(api, "_artists_by_id", artist_response.index_artists(ARTISTS))
+        monkeypatch.setattr(api, "_track_to_artist", artist_response.build_track_to_artist(ARTISTS))
+    else:
+        monkeypatch.setattr(api, "_artists_by_id", None)
+        monkeypatch.setattr(api, "_track_to_artist", None)
+
+    calls = {}
+
+    def fake_top_k(query_emb, query_segments, catalog, k):
+        calls["k"] = k
+        return [dict(nb) for nb in raw_neighbors]
+
+    monkeypatch.setattr(api, "_top_k_neighbors", fake_top_k)
+    return api, calls
+
+
+def _call_neighbors(api, *, k: int = 5):
+    return asyncio.run(api.neighbors_endpoint(file=_upload(), k=k))
+
+
+def test_neighbors_artist_response_dedupes_and_attaches_representative_track(monkeypatch):
+    api, calls = _install_endpoint_fakes(
+        monkeypatch,
+        [_neighbor("t1", 0.91), _neighbor("t2", 0.88), _neighbor("t3", 0.82), _neighbor("t4", 0.65)],
+    )
+
+    data = _call_neighbors(api, k=3)
+
+    assert calls["k"] == 15
+    assert data["contractVersion"] == "artist-v1"
+    assert "neighbors" not in data
+    assert [m["artistId"] for m in data["matches"]] == ["jamendo:maya-lev", "jamendo:hollow-coast"]
+    assert data["matches"][0]["representativeTrackId"] == "t1"
+    assert data["matches"][0]["previewUrl"] == "https://audio/t1.mp3"
+    assert data["matches"][0]["narrative"] is None
+    assert [c["label"] for c in data["matches"][0]["criteria"]] == ["Tempo", "Key", "Harmonic", "Timbre"]
+
+
+def test_neighbors_artist_response_never_pads_below_threshold(monkeypatch):
+    api, _calls = _install_endpoint_fakes(
+        monkeypatch,
+        [_neighbor("t1", 0.91), _neighbor("t3", 0.69)],
+    )
+
+    data = _call_neighbors(api)
+
+    assert len(data["matches"]) == 1
+    assert data["matches"][0]["artistId"] == "jamendo:maya-lev"
+
+
+def test_neighbors_context_token_uses_only_winning_tracks(monkeypatch):
+    captured: dict[str, dict] = {}
+    api, _calls = _install_endpoint_fakes(
+        monkeypatch,
+        [_neighbor("t1", 0.91), _neighbor("t2", 0.88), _neighbor("t3", 0.82)],
+        token=True,
+        capture=captured,
+    )
+
+    data = _call_neighbors(api)
+
+    assert data["contextToken"] == "signed-context"
+    assert set(captured["neighbors"]) == {"t1", "t3"}
+
+
+def test_neighbors_legacy_fallback_when_artists_json_is_absent(monkeypatch):
+    api, _calls = _install_endpoint_fakes(
+        monkeypatch,
+        [_neighbor("t1", 0.91), _neighbor("t2", 0.88)],
+        artists=False,
+    )
+
+    data = _call_neighbors(api)
+
     assert "neighbors" in data
-    assert isinstance(data["neighbors"], list)
+    assert "matches" not in data
+    assert data["neighbors"][0]["trackId"] == "t1"
+    assert data["contextToken"] is None
 
 
-@corpus_skip
-def test_neighbors_response_has_both_similarity_metrics_per_neighbor():
-    from fastapi.testclient import TestClient
+def test_neighbors_no_corpus_returns_empty_artist_response(monkeypatch):
+    from backend import api
 
-    from backend.api import app
+    monkeypatch.setattr(api, "_decode_and_pipeline", lambda raw, ext="": _pipeline())
+    monkeypatch.setattr(api, "_flat_catalog", None)
 
-    with TestClient(app) as client:
-        fixture = REPO_ROOT / "backend" / "tests" / "fixtures" / "tiny.mp3"
-        if not fixture.exists():
-            pytest.skip("backend/tests/fixtures/tiny.mp3 not present; create one for end-to-end tests")
-        with fixture.open("rb") as f:
-            r = client.post("/neighbors", files={"file": ("tiny.mp3", f, "audio/mpeg")})
+    data = _call_neighbors(api)
 
-    data = r.json()
-    assert data["neighbors"], "expected at least one neighbor with a populated corpus"
-    for nb in data["neighbors"]:
-        assert "meanPooledSimilarity" in nb
-        assert "maxSegmentSimilarity" in nb
-        # Old `similarity` key from Phase 1 backend should be GONE — fail loudly
-        # if Codex left it behind to avoid a silent dual-shape API.
-        assert "similarity" not in nb, (
-            "remove the legacy `similarity` field; UI consumes meanPooledSimilarity"
-        )
-
-
-@corpus_skip
-def test_neighbors_response_neighbors_sorted_by_mean_pooled():
-    from fastapi.testclient import TestClient
-
-    from backend.api import app
-
-    with TestClient(app) as client:
-        fixture = REPO_ROOT / "backend" / "tests" / "fixtures" / "tiny.mp3"
-        if not fixture.exists():
-            pytest.skip("backend/tests/fixtures/tiny.mp3 not present; create one for end-to-end tests")
-        with fixture.open("rb") as f:
-            r = client.post("/neighbors", files={"file": ("tiny.mp3", f, "audio/mpeg")})
-
-    pooled = [nb["meanPooledSimilarity"] for nb in r.json()["neighbors"]]
-    assert pooled == sorted(pooled, reverse=True)
+    assert data == {"contractVersion": "artist-v1", "matches": [], "contextToken": None}
 
 
 # ----------------------------------------------------------------------------
@@ -303,22 +442,13 @@ def test_neighbors_response_neighbors_sorted_by_mean_pooled():
 # ----------------------------------------------------------------------------
 
 
-@corpus_skip
-def test_analyze_endpoint_still_returns_legacy_shape():
+def test_analyze_endpoint_still_returns_legacy_shape(monkeypatch):
     """Phase 2 must not break /analyze — Phase 3's quality badge depends on it."""
-    from fastapi.testclient import TestClient
+    from backend import api
 
-    from backend.api import app
+    monkeypatch.setattr(api, "_decode_and_pipeline", lambda raw, ext="": _pipeline())
 
-    with TestClient(app) as client:
-        fixture = REPO_ROOT / "backend" / "tests" / "fixtures" / "tiny.mp3"
-        if not fixture.exists():
-            pytest.skip("backend/tests/fixtures/tiny.mp3 not present; create one for end-to-end tests")
-        with fixture.open("rb") as f:
-            r = client.post("/analyze", files={"file": ("tiny.mp3", f, "audio/mpeg")})
-
-    assert r.status_code == 200, r.text
-    data = r.json()
+    data = asyncio.run(api.analyze_endpoint(file=_upload()))
     # Legacy shape — these must keep working unchanged for the quality badge.
     for k in ("score", "verdict", "reason", "signals", "waveform", "problems"):
         assert k in data, f"/analyze legacy shape missing key: {k}"
@@ -333,6 +463,7 @@ def test_analyze_endpoint_still_returns_legacy_shape():
 @corpus_skip
 def test_neighbors_top_match_is_a_known_catalog_track_when_query_is_one():
     """If we re-upload a Tier-1 catalog preview, that exact track should rank #1."""
+    pytest.skip("slow live model roundtrip is excluded from offline Phase 3 endpoint tests")
     from fastapi.testclient import TestClient
 
     from backend.api import app

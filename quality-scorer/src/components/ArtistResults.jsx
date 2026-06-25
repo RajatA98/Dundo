@@ -6,9 +6,9 @@ import ArtistCard from './ArtistCard.jsx'
  * evidence is visible without a click. Never padded — renders exactly what
  * it's given (FR-9).
  *
- * @param {{ artists: object[] }} props
+ * @param {{ artists: object[], contextToken?: string|null }} props
  */
-export default function ArtistResults({ artists }) {
+export default function ArtistResults({ artists, contextToken = null }) {
   if (!artists || artists.length === 0) return null
   return (
     <section style={{ maxWidth: 940, margin: '0 auto', padding: '64px 28px 0' }}>
@@ -17,7 +17,7 @@ export default function ArtistResults({ artists }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
         {artists.map((artist, i) => (
-          <ArtistCard key={artist.artistId} artist={artist} defaultExpanded={i === 0} />
+          <ArtistCard key={artist.artistId} artist={artist} contextToken={contextToken} defaultExpanded={i === 0} />
         ))}
       </div>
     </section>

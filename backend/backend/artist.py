@@ -72,6 +72,10 @@ class ArtistMatch(BaseModel):
         None, description="Optional secondary 'Listen on Spotify' — only on a confident match"
     )
     # --- presentation fields the card renders inline (populated at /neighbors time) ---
+    representativeTrackId: Optional[str] = Field(
+        None,
+        description="Winning catalog track id for this artist match; frontend passes it to /narrative.",
+    )
     narrative: Optional[str] = Field(
         None,
         description="Grounded 'why this resonates' paragraph (ADR-0005). NULLABLE — null when "

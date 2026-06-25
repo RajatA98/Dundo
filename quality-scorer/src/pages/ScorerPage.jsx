@@ -2,28 +2,25 @@ import { useState } from 'react'
 import Hero from '../components/Hero.jsx'
 import DropZone from '../components/DropZone.jsx'
 import ArtistResults, { EmptyState } from '../components/ArtistResults.jsx'
-import { sampleArtists } from '../lib/sampleArtists.js'
+import { neighborsUpload } from '../lib/api.js'
 
 /**
  * Landing page — drop an AI track, meet the top-3 indie artists who sound
  * like it. Realizes the approved Dundo.dc.html app view: hero → drop zone →
  * artist results (Case A) → the honest Case-B state.
  *
- * ┌──────────────────────────────────────────────────────────────────────┐
- * │ ⚠ PROTOTYPE / PREVIEW — NOT wired to the backend.                      │
- * │ The drop zone does NOT call /neighbors or /analyze. It runs a fake     │
- * │ "listening" beat and renders the static `sampleArtists` regardless of  │
- * │ the file. This is the Phase-5 UI shell over the frozen artist contract;│
- * │ Phase 3 replaces the setTimeout below with a real `neighborsUpload()`  │
- * │ call returning the artist-framed response (same component contract).   │
- * └──────────────────────────────────────────────────────────────────────┘
+ * Phase 3 wired: the drop zone POSTs the upload to `/neighbors` and renders the
+ * real artist-framed response (`ArtistNeighborsResponse` — top-3, threshold-gated,
+ * never padded). `contextToken` is threaded to the cards so each "why this
+ * resonates" can hydrate lazily via `/narrative`.
  */
 export default function ScorerPage() {
-  const [phase, setPhase] = useState('results') // 'results' | 'analyzing' | 'error'
-  const [results, setResults] = useState(sampleArtists)
+  const [phase, setPhase] = useState('idle') // 'idle' | 'analyzing' | 'results' | 'empty' | 'error'
+  const [matches, setMatches] = useState([])
+  const [contextToken, setContextToken] = useState(null)
   const [error, setError] = useState('')
 
-  const onFile = (file) => {
+  const onFile = async (file) => {
     if (!file) return
     const ok = file.type.startsWith('audio/') || /\.(mp3|wav|flac|ogg|m4a)$/i.test(file.name)
     if (!ok) {
@@ -33,15 +30,16 @@ export default function ScorerPage() {
     }
     setError('')
     setPhase('analyzing')
-    // PROTOTYPE: no backend call — Phase 3 replaces this with
-    // `neighborsUpload(file, 3)` → artist-framed response.
-    if (import.meta.env.DEV) {
-      console.info('[Dundo] preview mode: rendering sampleArtists, not real /neighbors results (Phase 3 wires this).')
+    try {
+      const res = await neighborsUpload(file, 3)
+      const m = Array.isArray(res?.matches) ? res.matches : []
+      setMatches(m)
+      setContextToken(res?.contextToken || null)
+      setPhase(m.length > 0 ? 'results' : 'empty')
+    } catch (e) {
+      setError(e?.message || 'Something went wrong analyzing your track — please try again.')
+      setPhase('error')
     }
-    setTimeout(() => {
-      setResults(sampleArtists)
-      setPhase('results')
-    }, 1100)
   }
 
   return (
@@ -51,13 +49,8 @@ export default function ScorerPage() {
 
       {phase === 'analyzing' && <Analyzing />}
       {phase === 'error' && <ErrorNote msg={error} />}
-      {phase === 'results' && (
-        <>
-          <ArtistResults artists={results} />
-          {/* Case-B preview, mirroring the approved design canvas. */}
-          <EmptyState asPreview />
-        </>
-      )}
+      {phase === 'results' && <ArtistResults artists={matches} contextToken={contextToken} />}
+      {phase === 'empty' && <EmptyState />}
     </>
   )
 }

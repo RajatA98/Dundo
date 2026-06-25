@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from backend.artist_response import (
+    build_artist_match_pairs,
     build_artist_matches,
     build_track_to_artist,
     index_artists,
@@ -43,6 +44,7 @@ def test_dedupes_to_one_card_per_artist_highest_similarity_wins():
     matches = build_artist_matches(ranked, by_id, t2a, threshold=0.7, k=3)
     assert [m.artistId for m in matches] == ["jamendo:maya-lev", "jamendo:hollow-coast"]
     assert matches[0].similarity == 0.9  # highest Maya track, not 0.85
+    assert matches[0].representativeTrackId == "t1"
 
 
 def test_threshold_excludes_weak_and_never_pads():
@@ -59,6 +61,17 @@ def test_caps_at_k():
     ranked = [("t1", 0.9), ("t3", 0.8)]
     matches = build_artist_matches(ranked, by_id, t2a, threshold=0.7, k=1)
     assert len(matches) == 1
+
+
+def test_match_pairs_expose_winning_track_id():
+    by_id, t2a = _indexes()
+    ranked = [("t2", 0.92), ("t1", 0.9), ("t3", 0.8)]
+    pairs = build_artist_match_pairs(ranked, by_id, t2a, threshold=0.7, k=3)
+    assert [(m.artistId, tid) for m, tid in pairs] == [
+        ("jamendo:maya-lev", "t2"),
+        ("jamendo:hollow-coast", "t3"),
+    ]
+    assert pairs[0][0].representativeTrackId == "t2"
 
 
 def test_optional_fields_passthrough_only_when_present():

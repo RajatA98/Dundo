@@ -13,6 +13,11 @@ CORPUS_PATTERNS = [
     "embeddings.npy",
     "segment_embeddings.npz",
     "manifest.json",
+    # examples.json + self_retrieval.json are in manifest.json's sha256 file list,
+    # so validate_manifest_file_hashes() requires them present after snapshot —
+    # fetch them too or validation fails on first HF-dataset load.
+    "examples.json",
+    "self_retrieval.json",
     "*.index",
 ]
 

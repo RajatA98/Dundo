@@ -74,6 +74,7 @@ def test_optional_fields_default_empty_not_placeholder():
     assert m.location is None
     assert m.supportLinks == []
     assert m.spotifyUrl is None
+    assert m.representativeTrackId is None
     # narrative + criteria are part of the contract but nullable/empty until populated.
     assert m.narrative is None
     assert m.criteria == []
@@ -89,3 +90,16 @@ def test_criteria_carry_data_not_presentation():
     assert m.narrative.startswith("Both")
     assert m.criteria[0].agreement == 1.0
     assert not hasattr(m.criteria[0], "fill")  # no presentation leak in the contract
+
+
+def test_representative_track_id_serializes_without_version_bump():
+    m = ArtistMatch(
+        artistId="jamendo:x",
+        name="X",
+        similarity=0.8,
+        listenUrl="u",
+        representativeTrackId="jamendo:track:1",
+    )
+    data = ArtistNeighborsResponse(matches=[m]).model_dump()
+    assert data["contractVersion"] == "artist-v1"
+    assert data["matches"][0]["representativeTrackId"] == "jamendo:track:1"

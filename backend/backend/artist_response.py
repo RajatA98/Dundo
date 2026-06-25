@@ -34,7 +34,7 @@ def build_track_to_artist(artists: list[dict]) -> dict[str, str]:
     return idx
 
 
-def _artist_match(artist: dict, similarity: float) -> ArtistMatch:
+def _artist_match(artist: dict, similarity: float, representative_track_id: str | None = None) -> ArtistMatch:
     """Map one enriched artist record + the matched similarity to ArtistMatch.
 
     Optional fields (location, supportLinks, spotifyUrl, previewUrl) pass through
@@ -50,6 +50,7 @@ def _artist_match(artist: dict, similarity: float) -> ArtistMatch:
         location=artist.get("location"),
         supportLinks=[SupportLink(**link) for link in (artist.get("supportLinks") or [])],
         spotifyUrl=artist.get("spotifyUrl"),
+        representativeTrackId=representative_track_id,
         narrative=None,
         criteria=[],
     )
@@ -71,8 +72,26 @@ def build_artist_matches(
     Fewer than k honest matches is correct and expected — we never backfill with
     weak ones.
     """
+    return [match for match, _track_id in build_artist_match_pairs(
+        ranked_tracks,
+        artists_by_id,
+        track_to_artist,
+        threshold=threshold,
+        k=k,
+    )]
+
+
+def build_artist_match_pairs(
+    ranked_tracks: Iterable[tuple[str, float]],
+    artists_by_id: dict[str, dict],
+    track_to_artist: dict[str, str],
+    *,
+    threshold: float,
+    k: int = 3,
+) -> list[tuple[ArtistMatch, str]]:
+    """Return artist matches plus the winning track id that earned each rank."""
     seen: set[str] = set()
-    matches: list[ArtistMatch] = []
+    matches: list[tuple[ArtistMatch, str]] = []
     for track_id, sim in ranked_tracks:
         if sim < threshold:
             continue  # honest threshold — below it never appears
@@ -83,7 +102,7 @@ def build_artist_matches(
         if not artist:
             continue
         seen.add(artist_id)
-        matches.append(_artist_match(artist, sim))
+        matches.append((_artist_match(artist, sim, track_id), track_id))
         if len(matches) >= k:
             break
     return matches

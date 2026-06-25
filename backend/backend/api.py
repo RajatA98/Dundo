@@ -40,7 +40,8 @@ from pydantic import BaseModel, Field
 # place via clap_windowed's swap. We still import clap_engine here only because
 # legacy code paths may reference it; the encoder load + genre tagging both go
 # through muq_engine.
-from . import __version__, context_token, corpus_dataset, muq_engine, narrative_telemetry, clap_windowed, config, mir_features, similarity
+from . import __version__, artist_response, context_token, corpus_dataset, muq_engine, narrative_telemetry, clap_windowed, config, mir_features, similarity
+from .artist import ArtistNeighborsResponse, Criterion
 from .librosa_engine import analyze_array
 from .scoring import compute_report
 
@@ -84,6 +85,8 @@ _catalog_cosine_distribution: np.ndarray | None = None  # sorted upper-tri off-d
 _model_sha: str = ""
 _catalog_sha: str = ""  # sha256 of manifest.json bytes; used in contextToken claims
 _threshold_default: float = config.SIMILARITY_THRESHOLD_DEFAULT
+_artists_by_id: dict[str, dict] | None = None
+_track_to_artist: dict[str, str] | None = None
 
 
 def _default_corpus_dir() -> Path:
@@ -98,11 +101,13 @@ def _load_corpus() -> None:
     global _corpus_tracks, _corpus_embeddings, _corpus_by_id, _flat_catalog
     global _catalog_cosine_distribution
     global _model_sha, _catalog_sha, _threshold_default
+    global _artists_by_id, _track_to_artist
     corpus_dir = corpus_dataset.resolve_corpus_dir(Path(os.getenv("CORPUS_DIR", str(_default_corpus_dir()))))
     cpath = corpus_dir / "corpus.json"
     epath = corpus_dir / "embeddings.npy"
     spath = corpus_dir / "segment_embeddings.npz"
     mpath = corpus_dir / "manifest.json"
+    apath = corpus_dir / "artists.json"
     missing = [p.name for p in (cpath, epath, spath, mpath) if not p.exists()]
     if missing:
         print(
@@ -117,6 +122,8 @@ def _load_corpus() -> None:
         _model_sha = ""
         _catalog_sha = ""
         _threshold_default = config.SIMILARITY_THRESHOLD_DEFAULT
+        _artists_by_id = None
+        _track_to_artist = None
         return
     try:
         data = json.loads(cpath.read_text())
@@ -138,6 +145,17 @@ def _load_corpus() -> None:
         _flat_catalog = similarity.build_flat_catalog(_corpus_tracks, _corpus_embeddings, segment_embeddings)
         _catalog_cosine_distribution = similarity.compute_catalog_distribution(_flat_catalog)
         _corpus_by_id = {str(row["track_id"]): row for row in _corpus_tracks if row.get("track_id")}
+        if apath.exists():
+            artists_list = json.loads(apath.read_text())
+            if not isinstance(artists_list, list):
+                raise ValueError("artists.json must contain a list")
+            _artists_by_id = artist_response.index_artists(artists_list)
+            _track_to_artist = artist_response.build_track_to_artist(artists_list)
+            print(f"[api] artists loaded: {len(_artists_by_id)} artists")
+        else:
+            _artists_by_id = None
+            _track_to_artist = None
+            print("[api] artists.json not found — /neighbors will use legacy track-shaped response")
         if _corpus_embeddings.shape[0] != len(_corpus_tracks):
             print(
                 f"[api] WARNING corpus length {len(_corpus_tracks)} ≠ embeddings rows "
@@ -157,6 +175,8 @@ def _load_corpus() -> None:
         _model_sha = ""
         _catalog_sha = ""
         _threshold_default = config.SIMILARITY_THRESHOLD_DEFAULT
+        _artists_by_id = None
+        _track_to_artist = None
 
 
 @asynccontextmanager
@@ -322,6 +342,94 @@ def _build_track(file: UploadFile, pipeline: dict, *, source: str, id_: str) -> 
     }
 
 
+_CRITERION_LABELS = {
+    "tempo": "Tempo",
+    "key": "Key",
+    "harmonic": "Harmonic",
+    "timbre": "Timbre",
+}
+
+
+def _criteria_block_to_artist_criteria(criteria_block: dict | None) -> list[Criterion]:
+    if not criteria_block:
+        return []
+    criteria: list[Criterion] = []
+    for cid in ("tempo", "key", "harmonic", "timbre"):
+        entry = criteria_block.get(cid)
+        if not entry:
+            continue
+        criteria.append(
+            Criterion(
+                label=_CRITERION_LABELS[cid],
+                detail=str(entry.get("label") or ""),
+                agreement=float(entry.get("agreement", 0.0)),
+            )
+        )
+    return criteria
+
+
+def _track_preview_url(track: dict) -> str | None:
+    external_ids = track.get("external_ids") or {}
+    return (
+        external_ids.get("jamendoAudioUrl")
+        or external_ids.get("previewUrl")
+        or track.get("previewUrl")
+        or track.get("audioUrl")
+    )
+
+
+def _issue_context_token_for_neighbors(query_fingerprint: str, neighbors: list[dict]) -> str | None:
+    if not neighbors or not context_token.is_configured():
+        return None
+    neighbor_fragments: dict[str, dict] = {}
+    for nb in neighbors:
+        track = nb.get("track") or {}
+        ts = nb.get("matchTimestamp") or {}
+        neighbor_fragments[str(nb["trackId"])] = context_token.neighbor_context_fragment(
+            track_id=str(nb["trackId"]),
+            title=str(track.get("title") or nb["trackId"]),
+            artist=track.get("artist"),
+            query_window=(
+                float(ts.get("queryStartSec", 0.0)),
+                float(ts.get("queryEndSec", 0.0)),
+            ),
+            match_window=(
+                float(ts.get("catalogStartSec", 0.0)),
+                float(ts.get("catalogEndSec", 0.0)),
+            ),
+            raw_cosine=float(nb.get("rawCosine", 0.0)),
+            criteria=_criteria_to_token_fragment(nb.get("criteria")),
+        )
+    return context_token.issue(
+        query_fingerprint=query_fingerprint,
+        model_sha=_model_sha or "unpinned",
+        catalog_sha=_catalog_sha or "no-catalog",
+        neighbors=neighbor_fragments,
+    )
+
+
+def _legacy_neighbors_response(
+    query_track: dict,
+    neighbors: list[dict],
+    query_fingerprint: str,
+    pipeline: dict,
+) -> dict:
+    specificity = float(similarity.query_specificity(pipeline["emb"].astype(np.float32), _flat_catalog))
+    return {
+        "query": query_track,
+        "neighbors": neighbors,
+        "topMeanPooledSimilarity": float(neighbors[0]["meanPooledSimilarity"]) if neighbors else 0.0,
+        "topMaxSegmentSimilarity": float(neighbors[0]["maxSegmentSimilarity"]) if neighbors else 0.0,
+        "topPercentileRank": float(neighbors[0]["percentileRank"]) if neighbors else 0.0,
+        "topSimilarityLabel": neighbors[0]["similarityLabel"] if neighbors else "weak",
+        "querySpecificity": specificity,
+        "modelSha": _model_sha,
+        "thresholdDefault": _threshold_default,
+        "queryFingerprint": query_fingerprint,
+        "contextToken": _issue_context_token_for_neighbors(query_fingerprint, neighbors),
+    }
+
+
 # --- endpoints -----------------------------------------------------------------
 
 @app.get("/health")
@@ -365,23 +473,15 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
     query_track = _build_track(file, pipeline, source="upload", id_="upload")
 
     if _flat_catalog is None:
-        return {
-            "query": query_track,
-            "neighbors": [],
-            "verdict": "no_corpus",
-            "topMeanPooledSimilarity": 0.0,
-            "topMaxSegmentSimilarity": 0.0,
-            "modelSha": _model_sha,
-            "thresholdDefault": _threshold_default,
-            "queryFingerprint": query_fingerprint,
-            "contextToken": None,
-        }
+        return ArtistNeighborsResponse(matches=[], contextToken=None).model_dump()
+
+    artist_mode = _artists_by_id is not None and _track_to_artist is not None
 
     neighbors = _top_k_neighbors(
         pipeline["emb"].astype(np.float32),
         pipeline["segment_embeddings"].astype(np.float32),
         _flat_catalog,
-        k=k,
+        k=max(int(k), 15) if artist_mode else int(k),
     )
 
     # ADR-0001: calibrate raw cosines against the catalog distribution so the
@@ -419,53 +519,36 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
         # gracefully (criteria table just hides).
         nb["criteria"] = _build_criteria_block(pipeline.get("mir"), nb["track"].get("mir_features"))
 
-    specificity = float(similarity.query_specificity(pipeline["emb"].astype(np.float32), _flat_catalog))
+    if not artist_mode:
+        return _legacy_neighbors_response(query_track, neighbors, query_fingerprint, pipeline)
 
-    # Codex round-2 Q3: stateless signed token replaces the in-memory cache.
-    # /narrative will verify this token and rebuild context server-side from
-    # the embedded claims. Token is None when HMAC key isn't configured —
-    # /narrative also 503s in that case so the gating is consistent.
-    ctx_token = None
-    if context_token.is_configured():
-        neighbor_fragments: dict[str, dict] = {}
-        for nb in neighbors:
-            track = nb.get("track") or {}
-            ts = nb.get("matchTimestamp") or {}
-            neighbor_fragments[str(nb["trackId"])] = context_token.neighbor_context_fragment(
-                track_id=str(nb["trackId"]),
-                title=str(track.get("title") or nb["trackId"]),
-                artist=track.get("artist"),
-                query_window=(
-                    float(ts.get("queryStartSec", 0.0)),
-                    float(ts.get("queryEndSec", 0.0)),
-                ),
-                match_window=(
-                    float(ts.get("catalogStartSec", 0.0)),
-                    float(ts.get("catalogEndSec", 0.0)),
-                ),
-                raw_cosine=float(nb.get("rawCosine", 0.0)),
-                criteria=_criteria_to_token_fragment(nb.get("criteria")),
-            )
-        ctx_token = context_token.issue(
-            query_fingerprint=query_fingerprint,
-            model_sha=_model_sha or "unpinned",
-            catalog_sha=_catalog_sha or "no-catalog",
-            neighbors=neighbor_fragments,
-        )
+    ranked_tracks = [(str(nb["trackId"]), float(nb["rawCosine"])) for nb in neighbors]
+    match_pairs = artist_response.build_artist_match_pairs(
+        ranked_tracks,
+        _artists_by_id,
+        _track_to_artist,
+        threshold=_threshold_default,
+        k=3,
+    )
 
-    return {
-        "query": query_track,
-        "neighbors": neighbors,
-        "topMeanPooledSimilarity": float(neighbors[0]["meanPooledSimilarity"]) if neighbors else 0.0,
-        "topMaxSegmentSimilarity": float(neighbors[0]["maxSegmentSimilarity"]) if neighbors else 0.0,
-        "topPercentileRank": float(neighbors[0]["percentileRank"]) if neighbors else 0.0,
-        "topSimilarityLabel": neighbors[0]["similarityLabel"] if neighbors else "weak",
-        "querySpecificity": specificity,
-        "modelSha": _model_sha,
-        "thresholdDefault": _threshold_default,
-        "queryFingerprint": query_fingerprint,
-        "contextToken": ctx_token,
-    }
+    neighbors_by_id = {str(nb["trackId"]): nb for nb in neighbors}
+    matches = []
+    winning_neighbors: list[dict] = []
+    for match, winning_track_id in match_pairs:
+        nb = neighbors_by_id.get(winning_track_id)
+        if not nb:
+            continue
+        track = nb.get("track") or {}
+        match.similarity = float(nb["rawCosine"])
+        match.representativeTrackId = winning_track_id
+        match.criteria = _criteria_block_to_artist_criteria(nb.get("criteria"))
+        if preview_url := _track_preview_url(track):
+            match.previewUrl = preview_url
+        matches.append(match)
+        winning_neighbors.append(nb)
+
+    ctx_token = _issue_context_token_for_neighbors(query_fingerprint, winning_neighbors)
+    return ArtistNeighborsResponse(matches=matches, contextToken=ctx_token).model_dump()
 
 
 def _criteria_to_token_fragment(criteria_block: dict | None) -> list[dict] | None:

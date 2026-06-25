@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { simLabel } from '../lib/sampleArtists.js'
+import { fetchNarrative } from '../lib/api.js'
 
 /**
  * ArtistCard — the hero of the results. The human artist leads; the cosine
@@ -12,9 +13,41 @@ import { simLabel } from '../lib/sampleArtists.js'
  *
  * @param {{ artist: object, defaultExpanded?: boolean }} props
  */
-export default function ArtistCard({ artist, defaultExpanded = false }) {
+export default function ArtistCard({ artist, contextToken = null, defaultExpanded = false }) {
   const [playing, setPlaying] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded)
+  const [narrative, setNarrative] = useState(artist.narrative || null)
+
+  // Lazy "why this resonates" (ADR-0005): the artist response leaves narrative
+  // null; hydrate it from /narrative with the winning track id + the signed
+  // contextToken. Static/sample data (narrative already present) skips the fetch.
+  useEffect(() => {
+    if (narrative || !contextToken || !artist.representativeTrackId) return
+    let cancelled = false
+    fetchNarrative(contextToken, artist.representativeTrackId, 'whySimilar')
+      .then((res) => {
+        if (!cancelled && res && res.kind === 'narrative' && res.prose) setNarrative(res.prose)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextToken, artist.representativeTrackId])
+
+  // Real audio preview — play/pause the artist's representative track (previewUrl
+  // is the streamable host mp3). Cross-origin <audio> playback needs no CORS.
+  const audioRef = useRef(null)
+  const togglePlay = () => {
+    const el = audioRef.current
+    if (!el || !artist.previewUrl) return
+    if (playing) {
+      el.pause()
+      setPlaying(false)
+    } else {
+      el.play().then(() => setPlaying(true)).catch(() => setPlaying(false))
+    }
+  }
 
   const hasLocation = !!artist.location
   const hasSupport = artist.supportLinks && artist.supportLinks.length > 0
@@ -61,8 +94,10 @@ export default function ArtistCard({ artist, defaultExpanded = false }) {
 
       {/* audio preview */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 22, padding: '12px 16px', background: 'var(--color-wash)', borderRadius: 12 }}>
+        <audio ref={audioRef} src={artist.previewUrl || undefined} onEnded={() => setPlaying(false)} preload="none" />
         <button
-          onClick={() => setPlaying((p) => !p)}
+          onClick={togglePlay}
+          disabled={!artist.previewUrl}
           aria-label={playing ? 'Pause preview' : 'Play preview'}
           style={{ flex: 'none', width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'var(--color-ink)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
@@ -92,15 +127,17 @@ export default function ArtistCard({ artist, defaultExpanded = false }) {
         <span style={{ flex: 'none', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--color-muted)' }}>{artist.duration || ''}</span>
       </div>
 
-      {/* why this resonates */}
-      <div style={{ marginTop: 22 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-teal)', marginBottom: 9 }}>
-          Why this resonates
+      {/* why this resonates — hidden until the grounded narrative hydrates (or when /narrative is disabled) */}
+      {narrative && (
+        <div style={{ marginTop: 22 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-teal)', marginBottom: 9 }}>
+            Why this resonates
+          </div>
+          <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 17, lineHeight: 1.62, color: 'var(--color-ink-soft)', margin: 0, maxWidth: '64ch' }}>
+            {narrative}
+          </p>
         </div>
-        <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 17, lineHeight: 1.62, color: 'var(--color-ink-soft)', margin: 0, maxWidth: '64ch' }}>
-          {artist.narrative}
-        </p>
-      </div>
+      )}
 
       {/* action row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 24 }}>
