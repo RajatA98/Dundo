@@ -54,6 +54,11 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
   const hasSpotify = !!artist.spotifyUrl
   const expandable = artist.criteria && artist.criteria.length > 0
   const sim = Math.round((artist.similarity ?? 0) * 100)
+  // Artist cover from Jamendo, derived from the artist page id in listenUrl
+  // (…/artist/355362). Hides itself on 404 — no blue placeholder when absent.
+  const [imgOk, setImgOk] = useState(true)
+  const jamId = (artist.listenUrl || '').match(/artist\/(\d+)/)?.[1]
+  const imageUrl = artist.imageUrl || (jamId ? `https://usercontent.jamendo.com?type=artist&id=${jamId}&width=160` : null)
 
   // Seeded bars so the waveform is stable per artist (mirrors the design).
   const bars = useMemo(() => {
@@ -70,9 +75,14 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
     <div style={{ background: 'var(--color-paper)', border: '1px solid var(--color-line)', borderRadius: 16, padding: 28 }}>
       {/* top row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18 }}>
-        <div style={{ flex: 'none', width: 76, height: 76, borderRadius: 12, background: artist.artGrad || 'linear-gradient(140deg,#0c8f86,#3A57D6)', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 7px, transparent 7px 14px)' }} />
-        </div>
+        {imageUrl && imgOk ? (
+          <img
+            src={imageUrl}
+            alt={artist.name}
+            onError={() => setImgOk(false)}
+            style={{ flex: 'none', width: 76, height: 76, borderRadius: 12, objectFit: 'cover', background: 'var(--color-wash)' }}
+          />
+        ) : null}
         <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 27, lineHeight: 1.1, letterSpacing: '-0.01em', margin: 0 }}>

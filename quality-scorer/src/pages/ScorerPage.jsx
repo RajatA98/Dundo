@@ -19,6 +19,7 @@ export default function ScorerPage() {
   const [matches, setMatches] = useState([])
   const [contextToken, setContextToken] = useState(null)
   const [error, setError] = useState('')
+  const [queryUrl, setQueryUrl] = useState(null)
 
   const onFile = async (file) => {
     if (!file) return
@@ -29,6 +30,10 @@ export default function ScorerPage() {
       return
     }
     setError('')
+    setQueryUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
     setPhase('analyzing')
     try {
       const res = await neighborsUpload(file, 3)
@@ -49,9 +54,23 @@ export default function ScorerPage() {
 
       {phase === 'analyzing' && <Analyzing />}
       {phase === 'error' && <ErrorNote msg={error} />}
+      {(phase === 'results' || phase === 'empty') && queryUrl && <YourTrack url={queryUrl} />}
       {phase === 'results' && <ArtistResults artists={matches} contextToken={contextToken} />}
       {phase === 'empty' && <EmptyState />}
     </>
+  )
+}
+
+function YourTrack({ url }) {
+  return (
+    <section style={{ maxWidth: 940, margin: '0 auto', padding: '56px 28px 0' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 14 }}>
+        Your track
+      </div>
+      <div style={{ background: 'var(--color-paper)', border: '1px solid var(--color-line)', borderRadius: 16, padding: '16px 18px' }}>
+        <audio src={url} controls style={{ width: '100%', height: 38 }} />
+      </div>
+    </section>
   )
 }
 
