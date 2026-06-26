@@ -87,6 +87,10 @@ _catalog_sha: str = ""  # sha256 of manifest.json bytes; used in contextToken cl
 _threshold_default: float = config.SIMILARITY_THRESHOLD_DEFAULT
 _artists_by_id: dict[str, dict] | None = None
 _track_to_artist: dict[str, str] | None = None
+_warm_ready = False
+_warm_started = False
+_warm_error: str | None = None
+_warm_lock = threading.Lock()
 
 
 def _default_corpus_dir() -> Path:
@@ -143,6 +147,7 @@ def _load_corpus() -> None:
         _catalog_sha = hashlib.sha256(manifest_bytes).hexdigest()
         _threshold_default = similarity.threshold_from_manifest(manifest)
         _flat_catalog = similarity.build_flat_catalog(_corpus_tracks, _corpus_embeddings, segment_embeddings)
+        del segment_embeddings
         _catalog_cosine_distribution = similarity.compute_catalog_distribution(_flat_catalog)
         _corpus_by_id = {str(row["track_id"]): row for row in _corpus_tracks if row.get("track_id")}
         if apath.exists():
@@ -181,8 +186,7 @@ def _load_corpus() -> None:
 
 @asynccontextmanager
 async def lifespan(_app):
-    muq_engine.load()
-    _load_corpus()
+    _start_warmup_thread()
     yield
 
 
@@ -202,6 +206,36 @@ app.add_middleware(
 
 def _err(status: int, code: str) -> JSONResponse:
     return JSONResponse(status_code=status, content={"error": code})
+
+
+def _start_warmup_thread() -> None:
+    """Start model + corpus loading without blocking ASGI startup."""
+    global _warm_started, _warm_error
+    with _warm_lock:
+        if _warm_ready or _warm_started:
+            return
+        _warm_started = True
+        _warm_error = None
+        threading.Thread(target=_warm_model_and_corpus, name="dundo-warmup", daemon=True).start()
+
+
+def _warm_model_and_corpus() -> None:
+    global _warm_ready, _warm_started, _warm_error
+    try:
+        muq_engine.load()
+        _load_corpus()
+        _warm_ready = True
+    except Exception as exc:
+        _warm_error = repr(exc)
+        print(f"[api] warmup failed: {exc!r}")
+    finally:
+        _warm_started = False
+
+
+def _warming_err() -> JSONResponse | None:
+    if _warm_ready:
+        return None
+    return _err(503, "warming-up")
 
 
 def _validate_upload(file: UploadFile, raw: bytes) -> JSONResponse | None:
@@ -441,11 +475,16 @@ def health() -> dict:
         "version": __version__,
         "corpus": len(_corpus_tracks),
         "segments": int(_flat_catalog.segs_flat.shape[0]) if _flat_catalog else 0,
+        "ready": _warm_ready,
+        "warming": _warm_started and not _warm_ready,
+        "warmupError": _warm_error,
     }
 
 
 @app.post("/analyze")
 async def analyze_endpoint(file: UploadFile = File(...)):
+    if (err := _warming_err()) is not None:
+        return err
     raw = await file.read()
     if (err := _validate_upload(file, raw)) is not None:
         return err
@@ -459,6 +498,8 @@ async def analyze_endpoint(file: UploadFile = File(...)):
 @app.post("/neighbors")
 async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
     """Similarity audit: top-k nearest tracks in the catalog."""
+    if (err := _warming_err()) is not None:
+        return err
     raw = await file.read()
     if (err := _validate_upload(file, raw)) is not None:
         return err
@@ -623,6 +664,8 @@ _TOKEN_ERROR_TO_HTTP = {
 @app.post("/narrative")
 async def narrative_endpoint(req: NarrativeRequest):
     """RAG explanatory layer — see ADR-0005 for the full spec."""
+    if (err := _warming_err()) is not None:
+        return err
     with narrative_telemetry.measure_call(req.mode) as tel:
         # Gate 1: OpenAI key present. Without it we can't call GPT-4o-mini.
         if not os.getenv("OPENAI_API_KEY", "").strip():

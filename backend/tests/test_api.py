@@ -33,6 +33,54 @@ def clean_wav_bytes() -> bytes:
     return buf.getvalue()
 
 
+def test_health_reports_warmup_state_without_blocking_lifespan(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from backend import api
+
+    monkeypatch.setattr(api, "_start_warmup_thread", lambda: None)
+    monkeypatch.setattr(api, "_warm_ready", False)
+    monkeypatch.setattr(api, "_warm_started", True)
+
+    with TestClient(api.app) as c:
+        r = c.get("/health")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["ready"] is False
+    assert body["warming"] is True
+    assert "model" in body
+    assert "version" in body
+    assert "corpus" in body
+    assert "segments" in body
+
+
+def test_model_and_corpus_endpoints_return_503_while_warming(monkeypatch, clean_wav_bytes) -> None:
+    from fastapi.testclient import TestClient
+
+    from backend import api
+
+    monkeypatch.setattr(api, "_start_warmup_thread", lambda: None)
+    monkeypatch.setattr(api, "_warm_ready", False)
+    monkeypatch.setattr(api, "_warm_started", True)
+
+    with TestClient(api.app) as c:
+        analyze = c.post("/analyze", files={"file": ("test.wav", clean_wav_bytes, "audio/wav")})
+        neighbors = c.post("/neighbors", files={"file": ("test.wav", clean_wav_bytes, "audio/wav")})
+        narrative = c.post(
+            "/narrative",
+            json={"contextToken": "anything", "trackId": "x", "mode": "whySimilar"},
+        )
+
+    assert analyze.status_code == 503
+    assert analyze.json() == {"error": "warming-up"}
+    assert neighbors.status_code == 503
+    assert neighbors.json() == {"error": "warming-up"}
+    assert narrative.status_code == 503
+    assert narrative.json() == {"error": "warming-up"}
+
+
 @pytest.mark.slow
 def test_health(client) -> None:
     r = client.get("/health")

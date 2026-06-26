@@ -321,6 +321,8 @@ def _install_endpoint_fakes(monkeypatch, raw_neighbors, *, artists=True, token=F
     }
 
     monkeypatch.setattr(api, "_decode_and_pipeline", lambda raw, ext="": _pipeline())
+    monkeypatch.setattr(api, "_warm_ready", True)
+    monkeypatch.setattr(api, "_warm_started", False)
     monkeypatch.setattr(api, "_flat_catalog", object())
     monkeypatch.setattr(api, "_corpus_by_id", tracks)
     monkeypatch.setattr(api, "_threshold_default", 0.7)
@@ -430,6 +432,8 @@ def test_neighbors_no_corpus_returns_empty_artist_response(monkeypatch):
     from backend import api
 
     monkeypatch.setattr(api, "_decode_and_pipeline", lambda raw, ext="": _pipeline())
+    monkeypatch.setattr(api, "_warm_ready", True)
+    monkeypatch.setattr(api, "_warm_started", False)
     monkeypatch.setattr(api, "_flat_catalog", None)
 
     data = _call_neighbors(api)
@@ -447,6 +451,8 @@ def test_analyze_endpoint_still_returns_legacy_shape(monkeypatch):
     from backend import api
 
     monkeypatch.setattr(api, "_decode_and_pipeline", lambda raw, ext="": _pipeline())
+    monkeypatch.setattr(api, "_warm_ready", True)
+    monkeypatch.setattr(api, "_warm_started", False)
 
     data = asyncio.run(api.analyze_endpoint(file=_upload()))
     # Legacy shape — these must keep working unchanged for the quality badge.

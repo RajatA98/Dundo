@@ -144,6 +144,9 @@ def configured_env(monkeypatch):
     monkeypatch.setenv("CONTEXT_TOKEN_HMAC_KEY", _TEST_HMAC_SECRET)
     monkeypatch.setenv("OPENAI_API_KEY", _TEST_OPENAI_KEY)
     from backend import api, muq_engine
+    monkeypatch.setattr(api, "_start_warmup_thread", lambda: None, raising=True)
+    monkeypatch.setattr(api, "_warm_ready", True, raising=True)
+    monkeypatch.setattr(api, "_warm_started", False, raising=True)
     monkeypatch.setattr(api, "_load_corpus", lambda: None, raising=True)
     monkeypatch.setattr(muq_engine, "load", lambda: None, raising=True)
     monkeypatch.setattr(api, "_model_sha", _TEST_MODEL_SHA, raising=True)
@@ -197,6 +200,10 @@ def _client():
 def test_missing_openai_key_returns_503(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("CONTEXT_TOKEN_HMAC_KEY", _TEST_HMAC_SECRET)
+    from backend import api
+    monkeypatch.setattr(api, "_start_warmup_thread", lambda: None, raising=True)
+    monkeypatch.setattr(api, "_warm_ready", True, raising=True)
+    monkeypatch.setattr(api, "_warm_started", False, raising=True)
     with _client() as c:
         r = c.post(
             "/narrative",
@@ -209,6 +216,10 @@ def test_missing_openai_key_returns_503(monkeypatch):
 def test_missing_hmac_key_returns_503(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", _TEST_OPENAI_KEY)
     monkeypatch.delenv("CONTEXT_TOKEN_HMAC_KEY", raising=False)
+    from backend import api
+    monkeypatch.setattr(api, "_start_warmup_thread", lambda: None, raising=True)
+    monkeypatch.setattr(api, "_warm_ready", True, raising=True)
+    monkeypatch.setattr(api, "_warm_started", False, raising=True)
     with _client() as c:
         r = c.post(
             "/narrative",
