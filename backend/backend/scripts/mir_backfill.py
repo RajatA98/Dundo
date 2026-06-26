@@ -33,6 +33,36 @@ THREAD_LIMIT_ENV = {
 }
 COMMON_AUDIO_EXTS = (".mp3", ".m4a", ".wav", ".flac", ".ogg", ".aac")
 
+# Cap the audio decoded per track. MIR features (tempo, key, chroma, timbre) are
+# global and stable over a representative window; analysing the full 3–4 min track
+# is wasteful and matches the query side's analysis budget closely.
+ANALYSIS_MAX_SECONDS = 90.0
+
+# Building the audio index is an rglob over the whole audio tree (tens of thousands
+# of files on a network volume). Doing that once per shard worker dominated runtime;
+# instead the supervisor builds it once and workers load this cache file.
+_AUDIO_INDEX_CACHE = "_audio_index.json"
+
+
+def _audio_index_cache_path(out_dir: Path) -> Path:
+    return out_dir / _AUDIO_INDEX_CACHE
+
+
+def write_audio_index_cache(audio_dir: Path | None, out_dir: Path) -> None:
+    if not audio_dir:
+        return
+    out_dir.mkdir(parents=True, exist_ok=True)
+    index = build_audio_index(audio_dir)
+    write_json(_audio_index_cache_path(out_dir), {k: str(v) for k, v in index.items()})
+
+
+def load_audio_index_cached(audio_dir: Path | None, out_dir: Path) -> dict[str, Path]:
+    cache_path = _audio_index_cache_path(out_dir)
+    if cache_path.exists():
+        raw = json.loads(cache_path.read_text())
+        return {k: Path(v) for k, v in raw.items()}
+    return build_audio_index(audio_dir) if audio_dir else {}
+
 
 class ShardCrashed(RuntimeError):
     def __init__(self, message: str, *, returncode: int):
@@ -86,7 +116,7 @@ def run_worker(
     current_path = out_dir / f"{shard_name}.current.json"
     tracks = json.loads(shard_file.read_text())
     completed = read_completed_track_ids(out_path)
-    audio_index = build_audio_index(audio_dir) if audio_dir else {}
+    audio_index = load_audio_index_cached(audio_dir, out_dir) if audio_dir else {}
 
     written = 0
     for track in tracks:
@@ -133,6 +163,10 @@ def supervise_shards(
     running: dict[subprocess.Popen, Path] = {}
     summary = {"completed": 0, "crashed": 0}
     concurrency = max(1, int(concurrency))
+
+    # Build the audio index ONCE up front; workers load the cache instead of
+    # each re-walking the (network) audio tree.
+    write_audio_index_cache(audio_dir, out_dir)
 
     while pending or running:
         while pending and len(running) < concurrency:
@@ -295,7 +329,7 @@ def load_audio_for_track(
 ) -> tuple[Any, int]:
     local_path = resolve_local_audio_path(track, audio_dir, audio_index or {}) if audio_dir else None
     if local_path:
-        return librosa.load(str(local_path), sr=22050, mono=True)
+        return librosa.load(str(local_path), sr=22050, mono=True, duration=ANALYSIS_MAX_SECONDS)
     if not allow_download:
         raise ValueError("no local audio file")
     url = _audio_url_for(track)

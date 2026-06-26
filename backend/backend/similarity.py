@@ -205,6 +205,15 @@ def top_k_neighbors(
     ]
 
 
+# Above this catalog size, the full N×N pairwise computation is replaced by a
+# deterministic K-row sample. The exact path materializes an N×N cosine matrix
+# plus np.triu_indices (two int64 arrays of N*(N-1)/2) plus the off-diagonal
+# vector — ~33 GB at N≈49k, which OOM-crashes the Space at startup. A sample of
+# K rows yields a statistically representative pairwise-cosine distribution for
+# percentile calibration at O(K²) memory (~150 MB at K=6000).
+CATALOG_DISTRIBUTION_MAX_SAMPLE = 6000
+
+
 def compute_catalog_distribution(catalog: FlatCatalog) -> np.ndarray:
     """Sort the pairwise catalog-cosine distribution (excluding self-pairs).
 
@@ -213,14 +222,24 @@ def compute_catalog_distribution(catalog: FlatCatalog) -> np.ndarray:
     to a percentage — instead we map each query-vs-track cosine to its percentile
     rank in this distribution. Computed once at startup.
 
+    For catalogs larger than ``CATALOG_DISTRIBUTION_MAX_SAMPLE`` the distribution
+    is computed from a deterministic random sample of rows (seeded, reproducible)
+    to bound memory; the exact all-pairs path is kept for smaller catalogs.
+
     Returns:
-        1-D float32 array of length N*(N-1)/2 with all off-diagonal upper-triangle
-        pairwise cosines, sorted ascending. Empty array if N < 2.
+        1-D float32 array of off-diagonal upper-triangle pairwise cosines, sorted
+        ascending — length N*(N-1)/2 for small N, else K*(K-1)/2. Empty if N < 2.
     """
     n = len(catalog.track_ids)
     if n < 2:
         return np.empty((0,), dtype=np.float32)
-    sim = catalog.means @ catalog.means.T
+    means = catalog.means
+    if n > CATALOG_DISTRIBUTION_MAX_SAMPLE:
+        rng = np.random.default_rng(0)
+        idx = rng.choice(n, size=CATALOG_DISTRIBUTION_MAX_SAMPLE, replace=False)
+        means = means[idx]
+        n = CATALOG_DISTRIBUTION_MAX_SAMPLE
+    sim = means @ means.T
     iu = np.triu_indices(n, k=1)
     off_diag = sim[iu].astype(np.float32)
     off_diag.sort()
