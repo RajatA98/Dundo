@@ -256,6 +256,13 @@ def _warm_model_and_corpus() -> None:
     try:
         muq_engine.load()
         _load_corpus()
+        # Warm the inference path: the first real MuQ forward pass is ~3x slower cold,
+        # which can push the first upload past the gateway timeout. Encode 2s of silence
+        # so every real /neighbors hits the warm path.
+        try:
+            muq_engine.encode_audio(np.zeros(config.AUDIO_ENCODER_SAMPLE_RATE * 2, dtype=np.float32), config.AUDIO_ENCODER_SAMPLE_RATE)
+        except Exception as _exc:
+            print(f"[api] inference warm-up skipped: {_exc!r}")
         _warm_ready = True
     except Exception as exc:
         _warm_error = repr(exc)

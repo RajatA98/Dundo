@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 # --- analysis -----------------------------------------------------------------
 
 ANALYSIS_SR = 22050           # librosa load sample rate (mono signals)
@@ -13,7 +15,10 @@ WAVEFORM_BINS = 180           # the frontend Waveform component expects exactly 
 
 # --- live-upload caps ---------------------------------------------------------
 
-CLIP_CAP_S = 90               # truncate uploads to 90 s before CLAP encode
+# Truncate uploads before windowed MuQ encoding. Each 10 s window is a separate
+# CPU forward pass, so this directly sets /neighbors latency. Env-tunable: 30 s
+# (3 windows) keeps the demo snappy on CPU; raise via CLIP_CAP_S for finer matching.
+CLIP_CAP_S = int(os.getenv("CLIP_CAP_S", "30"))
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".flac", ".ogg", ".m4a"}
 ALLOWED_MIME_PREFIX = "audio/"
