@@ -9,6 +9,21 @@ const LABEL_DISPLAY = {
   newage: 'new age', jazzfusion: 'jazz fusion', easylistening: 'easy listening', popfolk: 'pop-folk',
 }
 const formatLabel = (s) => LABEL_DISPLAY[s] || s
+
+// Deterministic "why" used ONLY when the LLM narrative is unavailable after
+// retries, so every surfaced match always carries an honest explanation. Prefers
+// the real shared descriptors; otherwise uses the acoustic-resemblance framing
+// the backend itself emits for strong matches with no shared tags. Never fabricates.
+function fallbackNarrative(artist) {
+  const shared = (artist?.evidenceTags?.shared || [])
+    .map((t) => formatLabel(t.label))
+    .filter(Boolean)
+  const who = artist?.name || 'this artist'
+  if (shared.length) {
+    return `You and ${who} share ${shared.slice(0, 3).join(', ')} — that common sonic ground is what surfaced this match.`
+  }
+  return `This match came from a close acoustic resemblance between your track and ${who}'s sound — the strongest similarity sits in the matched section.`
+}
 const MAX_CHIPS = 4
 
 /**
@@ -35,9 +50,13 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
     let cancelled = false
     fetchNarrative(contextToken, artist.representativeTrackId, 'whySimilar')
       .then((res) => {
-        if (!cancelled && res && res.kind === 'narrative' && res.prose) setNarrative(res.prose)
+        if (cancelled) return
+        if (res && res.kind === 'narrative' && res.prose) setNarrative(res.prose)
+        else setNarrative(fallbackNarrative(artist)) // unavailable after retries → honest fallback
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setNarrative(fallbackNarrative(artist))
+      })
     return () => {
       cancelled = true
     }

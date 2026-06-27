@@ -197,51 +197,86 @@ export function audioUrlFor(track) {
  * @returns {Promise<object>} the typed result with .kind discriminator
  * @throws {Error} on non-2xx with the backend's `error` field as message
  */
+// The citation-validation gate occasionally rejects an otherwise-fine narrative
+// because GPT-4o-mini emitted ONE citation that fails validation — a
+// non-deterministic "unavailable: citation-hallucinated". Regenerating almost
+// always succeeds, so retry on `unavailable` as well as on transient transport
+// failures (timeout/network/5xx/503-warming). Terminal errors (narrative
+// disabled, stale/malformed token, unsupported mode) are NOT retried.
+const NARRATIVE_MAX_ATTEMPTS = 3
+const _NARRATIVE_TERMINAL = new Set([
+  'narrative-disabled',
+  'stale-token',
+  'malformed-token',
+  'malformed-context',
+  'unsupported-mode',
+])
+
 export async function fetchNarrative(contextToken, trackId, mode) {
-  const t0 = performance.now()
   if (!contextToken) {
     _narrativeBreadcrumb({ level: 'warning', mode, kind: 'error', code: 'narrative-disabled' })
     throw new Error('narrative-disabled')
   }
-  let r
-  try {
-    r = await fetch(`${API_BASE}/narrative`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contextToken, trackId, mode }),
-    })
-  } catch (networkErr) {
-    _narrativeBreadcrumb({ level: 'error', mode, kind: 'error', code: 'network-error' })
-    throw new Error('network-error')
-  }
-  if (!r.ok) {
-    let code = ''
+  let last
+  for (let attempt = 1; attempt <= NARRATIVE_MAX_ATTEMPTS; attempt++) {
+    const t0 = performance.now()
+    let r
     try {
-      const body = await r.json()
-      code = body?.error || ''
-    } catch {
-      /* not json */
+      r = await fetch(`${API_BASE}/narrative`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contextToken, trackId, mode }),
+      })
+    } catch (networkErr) {
+      _narrativeBreadcrumb({ level: 'error', mode, kind: 'error', code: 'network-error' })
+      last = new Error('network-error')
+      if (attempt < NARRATIVE_MAX_ATTEMPTS) {
+        await new Promise((res) => setTimeout(res, 400 * attempt))
+        continue
+      }
+      throw last
     }
     const latencyMs = Math.round(performance.now() - t0)
+    if (!r.ok) {
+      let code = ''
+      try {
+        code = (await r.json())?.error || ''
+      } catch {
+        /* not json */
+      }
+      _narrativeBreadcrumb({
+        level: r.status >= 500 ? 'error' : 'warning',
+        mode,
+        kind: 'error',
+        code: code || `http-${r.status}`,
+        latencyMs,
+      })
+      last = new Error(code || `HTTP ${r.status}`)
+      const retryable = r.status >= 500 && !_NARRATIVE_TERMINAL.has(code)
+      if (retryable && attempt < NARRATIVE_MAX_ATTEMPTS) {
+        await new Promise((res) => setTimeout(res, 400 * attempt))
+        continue
+      }
+      throw last
+    }
+    const body = await r.json()
     _narrativeBreadcrumb({
-      level: r.status >= 500 ? 'error' : 'warning',
+      level: body.kind === 'narrative' ? 'info' : 'warning',
       mode,
-      kind: 'error',
-      code: code || `http-${r.status}`,
+      kind: body.kind || 'unknown',
+      code: body.reason || null,
       latencyMs,
     })
-    throw new Error(code || `HTTP ${r.status}`)
+    if (body.kind === 'narrative') return body
+    // unavailable / low_confidence — regenerate (non-deterministic citation reject).
+    last = body
+    if (attempt < NARRATIVE_MAX_ATTEMPTS) {
+      await new Promise((res) => setTimeout(res, 400 * attempt))
+      continue
+    }
+    return body
   }
-  const body = await r.json()
-  const latencyMs = Math.round(performance.now() - t0)
-  _narrativeBreadcrumb({
-    level: body.kind === 'narrative' ? 'info' : 'warning',
-    mode,
-    kind: body.kind || 'unknown',
-    code: body.reason || null,
-    latencyMs,
-  })
-  return body
+  return last
 }
 
 
