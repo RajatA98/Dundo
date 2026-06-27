@@ -2,6 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { simLabel } from '../lib/sampleArtists.js'
 import { fetchNarrative } from '../lib/api.js'
 
+// MTG tag slugs → human display (most labels read fine as-is).
+const LABEL_DISPLAY = {
+  drumnbass: 'drum & bass', triphop: 'trip-hop', hiphop: 'hip-hop', rnb: 'R&B',
+  poprock: 'pop-rock', postrock: 'post-rock', punkrock: 'punk rock', hardrock: 'hard rock',
+  newage: 'new age', jazzfusion: 'jazz fusion', easylistening: 'easy listening', popfolk: 'pop-folk',
+}
+const formatLabel = (s) => LABEL_DISPLAY[s] || s
+const MAX_CHIPS = 4
+
 /**
  * ArtistCard — the hero of the results. The human artist leads; the cosine
  * similarity is a quiet secondary bar, never a loud %. Realizes the approved
@@ -101,6 +110,22 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
           </div>
         </div>
       </div>
+
+      {/* shared sound — overlap-first evidence (Evidence Layer). Renders only the gated shared
+          descriptors; absent entirely when there's no trustworthy overlap (never padded). */}
+      {artist.evidenceTags && artist.evidenceTags.shared && artist.evidenceTags.shared.length > 0 && (
+        <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11.5, letterSpacing: '0.04em', color: 'var(--color-muted)' }}>You both lean</span>
+          {artist.evidenceTags.shared.slice(0, MAX_CHIPS).map((t) => (
+            <span
+              key={`${t.kind}:${t.label}`}
+              style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-teal-deep)', background: 'var(--color-wash)', border: '1px solid var(--color-line)', borderRadius: 999, padding: '4px 11px' }}
+            >
+              {formatLabel(t.label)}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* audio preview */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 22, padding: '12px 16px', background: 'var(--color-wash)', borderRadius: 12 }}>

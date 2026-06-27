@@ -376,14 +376,56 @@ def test_neighbors_artist_response_dedupes_and_attaches_representative_track(mon
 
     data = _call_neighbors(api, k=3)
 
-    assert calls["k"] == 15
-    assert data["contractVersion"] == "artist-v1"
+    assert calls["k"] == 40  # widened for the evidence-tag voting pool (25 + buffer)
+    assert data["contractVersion"] == "artist-v2"
     assert "neighbors" not in data
     assert [m["artistId"] for m in data["matches"]] == ["jamendo:maya-lev", "jamendo:hollow-coast"]
     assert data["matches"][0]["representativeTrackId"] == "t1"
     assert data["matches"][0]["previewUrl"] == "https://audio/t1.mp3"
     assert data["matches"][0]["narrative"] is None
     assert [c["label"] for c in data["matches"][0]["criteria"]] == ["Tempo", "Key", "Harmonic", "Timbre"]
+
+
+def test_neighbors_attaches_evidence_tags_when_overlap_clears_gate(monkeypatch):
+    api, _calls = _install_endpoint_fakes(
+        monkeypatch,
+        [_neighbor("t1", 0.91), _neighbor("t2", 0.88), _neighbor("t3", 0.82), _neighbor("t4", 0.65)],
+    )
+    monkeypatch.setattr(api, "_catalog_tags", {
+        "t1": {"coarseGenre": ["rock"]},    # maya-lev winning track (candidate)
+        "t2": {"coarseGenre": ["metal"]},   # maya-lev's OTHER track — excluded from its own pool
+        "t3": {"coarseGenre": ["rock"]},    # hollow-coast — in maya-lev's pool, votes rock
+        "t4": {"coarseGenre": ["jazz"]},    # weak — in pool, votes jazz
+    })
+
+    data = _call_neighbors(api, k=3)
+
+    maya = data["matches"][0]
+    assert maya["artistId"] == "jamendo:maya-lev"
+    ev = maya["evidenceTags"]
+    assert ev is not None
+    assert ev["method"] == "mtg-knn-v1"
+    assert ev["excludedCandidate"] is True
+    assert ("genre", "rock") in {(t["kind"], t["label"]) for t in ev["shared"]}
+    # circularity guard: the candidate artist's own other track (t2 -> 'metal') never votes
+    assert all(t["label"] != "metal" for t in ev["query"])
+
+
+def test_neighbors_hides_evidence_when_no_overlap(monkeypatch):
+    api, _calls = _install_endpoint_fakes(
+        monkeypatch,
+        [_neighbor("t1", 0.91), _neighbor("t2", 0.88), _neighbor("t3", 0.82), _neighbor("t4", 0.65)],
+    )
+    monkeypatch.setattr(api, "_catalog_tags", {
+        "t1": {"coarseGenre": ["rock"]},      # candidate genre
+        "t3": {"coarseGenre": ["ambient"]},   # pool propagates ambient ...
+        "t4": {"coarseGenre": ["jazz"]},      # ... and jazz — neither overlaps 'rock'
+    })
+
+    data = _call_neighbors(api, k=3)
+
+    # candidate is rock; the (candidate-excluded) pool shares nothing -> block hidden
+    assert data["matches"][0]["evidenceTags"] is None
 
 
 def test_neighbors_artist_response_never_pads_below_threshold(monkeypatch):
@@ -438,7 +480,7 @@ def test_neighbors_no_corpus_returns_empty_artist_response(monkeypatch):
 
     data = _call_neighbors(api)
 
-    assert data == {"contractVersion": "artist-v1", "matches": [], "contextToken": None}
+    assert data == {"contractVersion": "artist-v2", "matches": [], "contextToken": None}
 
 
 # ----------------------------------------------------------------------------

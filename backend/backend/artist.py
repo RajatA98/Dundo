@@ -28,7 +28,8 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 # Bump this (and coordinate frontend + narrative schema) on any breaking shape change.
-CONTRACT_VERSION = "artist-v1"
+# v2: adds optional ArtistMatch.evidenceTags (Evidence Layer, mtg-knn-v1).
+CONTRACT_VERSION = "artist-v2"
 
 SupportKind = Literal[
     "jamendo", "fma", "bandcamp", "patreon", "website", "spotify", "other"
@@ -50,6 +51,35 @@ class Criterion(BaseModel):
     label: str  # "Tempo" | "Key" | "Harmonic" | "Timbre"
     detail: str  # human label, e.g. "4 BPM apart", "Same key — F minor"
     agreement: float = Field(..., ge=0.0, le=1.0, description="0–1 closeness on this criterion")
+
+
+EvidenceKind = Literal["genre", "instrument", "mood"]
+
+
+class EvidenceTag(BaseModel):
+    """One descriptor in the evidence overlap."""
+
+    kind: EvidenceKind
+    label: str
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+
+
+class EvidenceTags(BaseModel):
+    """The 'why this resonates' overlap block (Evidence Layer, method ``mtg-knn-v1``).
+
+    ``shared`` = descriptors true of BOTH the upload (k-NN propagated from its acoustic neighbors'
+    real MTG-Jamendo tags, with this candidate's artist excluded — no circular evidence) and this
+    artist (real MTG tags). The whole block is omitted from the match when no descriptor clears the
+    confidence gate — it never asserts a weak or contradictory overlap.
+    """
+
+    shared: list[EvidenceTag] = Field(default_factory=list)
+    query: list[EvidenceTag] = Field(default_factory=list)
+    match: list[EvidenceTag] = Field(default_factory=list)
+    confidence: Literal["high", "medium", "low"]
+    method: Literal["mtg-knn-v1"]
+    neighborCount: int
+    excludedCandidate: bool
 
 
 class ArtistMatch(BaseModel):
@@ -84,6 +114,11 @@ class ArtistMatch(BaseModel):
     criteria: list[Criterion] = Field(
         default_factory=list,
         description="4-criterion MIR evidence (ADR-0004), computed at /neighbors time. Empty when uncomputed.",
+    )
+    evidenceTags: Optional[EvidenceTags] = Field(
+        None,
+        description="Genre/mood/instrument overlap evidence (Evidence Layer, mtg-knn-v1). Absent when "
+        "no descriptor clears the confidence gate; never asserts a weak/contradictory overlap.",
     )
     # NOTE: these are NOT produced by the enrichment providers (enrich_spike.py) — they come
     # from the existing mir_features / rag_narrative machinery when the endpoint is wired (Phase 3).

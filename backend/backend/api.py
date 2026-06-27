@@ -40,8 +40,8 @@ from pydantic import BaseModel, Field
 # place via clap_windowed's swap. We still import clap_engine here only because
 # legacy code paths may reference it; the encoder load + genre tagging both go
 # through muq_engine.
-from . import __version__, artist_response, context_token, corpus_dataset, muq_engine, narrative_telemetry, clap_windowed, config, mir_features, similarity
-from .artist import ArtistNeighborsResponse, Criterion
+from . import __version__, artist_response, context_token, corpus_dataset, muq_engine, narrative_telemetry, clap_windowed, config, evidence_tags, mir_features, similarity
+from .artist import ArtistNeighborsResponse, Criterion, EvidenceTags
 from .librosa_engine import analyze_array
 from .scoring import compute_report
 
@@ -87,6 +87,9 @@ _catalog_sha: str = ""  # sha256 of manifest.json bytes; used in contextToken cl
 _threshold_default: float = config.SIMILARITY_THRESHOLD_DEFAULT
 _artists_by_id: dict[str, dict] | None = None
 _track_to_artist: dict[str, str] | None = None
+# Evidence Layer: {track_id: {coarseGenre/instrument/mood: [...]}} — support-filtered MTG tags.
+_catalog_tags: dict[str, dict] = {}
+EVIDENCE_SUPPORT_MIN = 50
 _warm_ready = False
 _warm_started = False
 _warm_error: str | None = None
@@ -100,12 +103,36 @@ def _default_corpus_dir() -> Path:
     return here.parents[2] / "quality-scorer" / "public" / "corpus"
 
 
+def _load_catalog_tags(corpus_dir: Path) -> dict[str, dict]:
+    """Load the Evidence Layer sidecar, keeping only labels above the support floor.
+
+    Returns {track_id: {coarseGenre/instrument/mood: [labels]}}. Empty when absent (older
+    catalogs) — the evidence block then simply never renders.
+    """
+    tpath = corpus_dir / "catalog_tags.json"
+    if not tpath.exists():
+        return {}
+    raw = json.loads(tpath.read_text())
+    support = (raw.get("_meta") or {}).get("support") or {}
+    allowed = {f: {l for l, c in counts.items() if c >= EVIDENCE_SUPPORT_MIN} for f, counts in support.items()}
+    out: dict[str, dict] = {}
+    for tid, entry in (raw.get("tracks") or {}).items():
+        kept = {}
+        for field in ("coarseGenre", "instrument", "mood"):
+            vals = [v for v in (entry.get(field) or []) if not allowed.get(field) or v in allowed[field]]
+            if vals:
+                kept[field] = vals
+        if kept:
+            out[tid] = kept
+    return out
+
+
 def _load_corpus() -> None:
     """Populate corpus globals from disk if all corpus artifacts are present."""
     global _corpus_tracks, _corpus_embeddings, _corpus_by_id, _flat_catalog
     global _catalog_cosine_distribution
     global _model_sha, _catalog_sha, _threshold_default
-    global _artists_by_id, _track_to_artist
+    global _artists_by_id, _track_to_artist, _catalog_tags
     corpus_dir = corpus_dataset.resolve_corpus_dir(Path(os.getenv("CORPUS_DIR", str(_default_corpus_dir()))))
     cpath = corpus_dir / "corpus.json"
     epath = corpus_dir / "embeddings.npy"
@@ -128,6 +155,7 @@ def _load_corpus() -> None:
         _threshold_default = config.SIMILARITY_THRESHOLD_DEFAULT
         _artists_by_id = None
         _track_to_artist = None
+        _catalog_tags = {}
         return
     try:
         data = json.loads(cpath.read_text())
@@ -161,6 +189,9 @@ def _load_corpus() -> None:
             _artists_by_id = None
             _track_to_artist = None
             print("[api] artists.json not found — /neighbors will use legacy track-shaped response")
+        _catalog_tags = _load_catalog_tags(corpus_dir)
+        if _catalog_tags:
+            print(f"[api] evidence tags loaded: {len(_catalog_tags)} tracks")
         if _corpus_embeddings.shape[0] != len(_corpus_tracks):
             print(
                 f"[api] WARNING corpus length {len(_corpus_tracks)} ≠ embeddings rows "
@@ -182,6 +213,7 @@ def _load_corpus() -> None:
         _threshold_default = config.SIMILARITY_THRESHOLD_DEFAULT
         _artists_by_id = None
         _track_to_artist = None
+        _catalog_tags = {}
 
 
 @asynccontextmanager
@@ -433,6 +465,7 @@ def _issue_context_token_for_neighbors(query_fingerprint: str, neighbors: list[d
             ),
             raw_cosine=float(nb.get("rawCosine", 0.0)),
             criteria=_criteria_to_token_fragment(nb.get("criteria")),
+            evidence_shared=nb.get("evidenceShared"),
         )
     return context_token.issue(
         query_fingerprint=query_fingerprint,
@@ -522,7 +555,7 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
         pipeline["emb"].astype(np.float32),
         pipeline["segment_embeddings"].astype(np.float32),
         _flat_catalog,
-        k=max(int(k), 15) if artist_mode else int(k),
+        k=max(int(k), 40) if artist_mode else int(k),
     )
 
     # ADR-0001: calibrate raw cosines against the catalog distribution so the
@@ -573,6 +606,20 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
     )
 
     neighbors_by_id = {str(nb["trackId"]): nb for nb in neighbors}
+    # Evidence Layer pool: every neighbor as (track_id, artist_id, sim) for k-NN tag propagation.
+    # The artist id comes from _track_to_artist so the per-card candidate-exclusion is consistent.
+    ev_neighbors = (
+        [
+            evidence_tags.Neighbor(
+                track_id=str(nb["trackId"]),
+                artist=_track_to_artist.get(str(nb["trackId"])),
+                sim=float(nb["rawCosine"]),
+            )
+            for nb in neighbors
+        ]
+        if _catalog_tags
+        else []
+    )
     matches = []
     winning_neighbors: list[dict] = []
     for match, winning_track_id in match_pairs:
@@ -585,6 +632,19 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
         match.criteria = _criteria_block_to_artist_criteria(nb.get("criteria"))
         if preview_url := _track_preview_url(track):
             match.previewUrl = preview_url
+        if ev_neighbors:
+            # candidate's artist excluded inside assemble_evidence_tags (no circular evidence).
+            block = evidence_tags.assemble_evidence_tags(
+                ev_neighbors,
+                candidate_track_id=winning_track_id,
+                candidate_artist=match.artistId,
+                catalog_tags=_catalog_tags,
+            )
+            if block is not None:
+                match.evidenceTags = EvidenceTags.model_validate(block)
+                # carry the gated shared descriptors into the context token so /narrative
+                # can ground on them even when MIR criteria are absent.
+                nb["evidenceShared"] = block.get("shared") or []
         matches.append(match)
         winning_neighbors.append(nb)
 
@@ -723,6 +783,7 @@ async def narrative_endpoint(req: NarrativeRequest):
                     rag_narrative.CriterionContext(**c)
                     for c in (fragment.get("criteria") or [])
                 ],
+                evidenceShared=fragment.get("evidenceShared") or [],
                 acrcloudCoverSongId=verified.acrcloudCoverSongId,
             )
         except Exception:

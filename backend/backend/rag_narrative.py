@@ -14,7 +14,7 @@ import logging
 import time
 from typing import Any, Literal, Union
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 NarrativeMode = Literal["whySimilar", "creatorAdvice"]
 CriterionId = Literal["tempo", "key", "harmonic", "timbre"]
@@ -45,6 +45,9 @@ class NarrativeContext(BaseModel):
     rawCosine: float
     criteria: list[CriterionContext]
     acrcloudCoverSongId: dict | None
+    # Evidence Layer: gated shared descriptors [{kind,label,confidence}] — grounds the
+    # narrative on genre/mood/instrument overlap even when MIR criteria are absent.
+    evidenceShared: list[dict] = Field(default_factory=list)
 
 
 class CitedValue(BaseModel):
@@ -94,19 +97,25 @@ SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
         "You are Dundo, a warm music-discovery assistant explaining why this "
         "artist resonates with what you made. You receive structured metadata "
         "about the uploaded audio and a matched catalog artist; you do not hear "
-        "the audio. Ground the explanation in the supplied tempo, key, harmonic, "
-        "and timbre evidence. Cite only tracks, criteria, and values present in "
-        "the supplied context. Output a single JSON object matching the schema. "
-        "No additional text, no markdown."
+        "the audio. Ground the explanation in the supplied evidence: the tempo, "
+        "key, harmonic, and timbre criteria when present, AND the shared "
+        "genre/instrument/mood descriptors in `sharedDescriptors`. Cite only "
+        "tracks, criteria, and values present in the supplied context, and "
+        "reference only descriptors listed in `sharedDescriptors` — never invent "
+        "a genre, mood, or instrument. Output a single JSON object matching the "
+        "schema. No additional text, no markdown."
     ),
     "creatorAdvice": (
         "You are Dundo, a warm music-discovery assistant helping creators make "
         "their upload feel more distinctive from a matched catalog artist. You "
         "receive structured metadata about the uploaded audio and the artist "
         "match; you do not hear the audio. Ground every suggestion in the "
-        "supplied tempo, key, harmonic, and timbre evidence. Cite only tracks, "
-        "criteria, and values present in the supplied context. Output a single "
-        "JSON object matching the schema. No additional text, no markdown."
+        "supplied evidence: the tempo, key, harmonic, and timbre criteria when "
+        "present, AND the shared genre/instrument/mood descriptors in "
+        "`sharedDescriptors`. Cite only tracks, criteria, and values present in "
+        "the supplied context, and reference only descriptors listed in "
+        "`sharedDescriptors` — never invent a genre, mood, or instrument. Output "
+        "a single JSON object matching the schema. No additional text, no markdown."
     ),
 }
 
@@ -159,6 +168,10 @@ def cache_key(
         "track_id": context.trackId,
         "mode": mode,
         "criteria_rounded": [_criterion_for_cache(c) for c in sorted(context.criteria, key=lambda c: c.id)],
+        # evidenceShared is prompt-relevant context, so it must affect the cache key.
+        "evidence_shared": sorted(
+            (str(d.get("kind")), str(d.get("label"))) for d in context.evidenceShared
+        ),
         "raw_cosine": round(float(context.rawCosine), 3),
     }
     return _sha256_json(payload)
@@ -275,13 +288,18 @@ def _call_openai_json(
 
 
 def _context_gate_reason(context: NarrativeContext) -> str | None:
-    if not context.criteria:
+    # Proceed when there is SOME groundable evidence — MIR criteria OR shared descriptors.
+    if not context.criteria and not context.evidenceShared:
         return "missing-criteria"
     if not context.title or not context.title.strip():
         return "missing-metadata"
     if not _window_is_valid(context.queryWindow) or not _window_is_valid(context.matchWindow):
         return "missing-metadata"
-    if not any(float(c.agreement) >= 0.55 for c in context.criteria) and float(context.rawCosine) < 0.75:
+    if (
+        not any(float(c.agreement) >= 0.55 for c in context.criteria)
+        and float(context.rawCosine) < 0.75
+        and not context.evidenceShared
+    ):
         return "weak-evidence"
     return None
 
@@ -303,6 +321,7 @@ def _build_user_prompt(context: NarrativeContext, mode: NarrativeMode) -> str:
         "matchWindow": list(context.matchWindow),
         "rawCosine": round(float(context.rawCosine), 3),
         "criteria": [_criterion_for_prompt(c) for c in sorted(context.criteria, key=lambda c: c.id)],
+        "sharedDescriptors": context.evidenceShared,
         "acrcloudCoverSongId": context.acrcloudCoverSongId,
     }
     return USER_PROMPT_TEMPLATE.format(
@@ -343,7 +362,10 @@ def _round_numbers(value: Any) -> Any:
 def _citations_are_grounded(citations: list[StructuredCitation], context: NarrativeContext) -> bool:
     criteria = {c.id: c for c in context.criteria}
     if not citations:
-        return False
+        # A narrative with MIR criteria MUST cite them. But an evidence-only narrative
+        # (no criteria, grounded purely on the shared descriptors in prose) legitimately
+        # carries no structured citations.
+        return not context.criteria and bool(context.evidenceShared)
 
     for citation in citations:
         if citation.trackId != context.trackId:

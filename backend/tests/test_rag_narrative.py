@@ -253,6 +253,32 @@ def test_low_context_short_circuits_llm() -> None:
     call.assert_not_called()
 
 
+def test_evidence_descriptors_revive_gate_without_criteria() -> None:
+    # criteria empty + no evidence -> gated; criteria empty + shared descriptors -> proceeds
+    assert rag_narrative._context_gate_reason(_context(criteria=[])) == "missing-criteria"
+    grounded = _context(criteria=[])
+    grounded.evidenceShared = [{"kind": "genre", "label": "rock", "confidence": 0.6}]
+    assert rag_narrative._context_gate_reason(grounded) is None
+
+
+def test_evidence_only_narrative_passes_with_empty_citations() -> None:
+    # narrative grounded purely on shared descriptors (no MIR) — empty citations are valid.
+    ctx = _context(criteria=[])
+    ctx.evidenceShared = [{"kind": "genre", "label": "rock", "confidence": 0.6}]
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "You both live in atmospheric rock — that shared sound is why this resonates.",
+        "citations": [],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="model-sha", catalog_sha="catalog-sha",
+        )
+    assert isinstance(result, NarrativeResponse)
+    call.assert_called_once()
+
+
 def test_cache_key_stable_under_key_reordering() -> None:
     ctx_a = _context()
     ctx_b = _context(criteria=list(reversed(ctx_a.criteria)))

@@ -18,6 +18,10 @@ CORPUS_PATTERNS = [
     # fetch them too or validation fails on first HF-dataset load.
     "examples.json",
     "self_retrieval.json",
+    # Evidence Layer sidecar (MTG editorial tags). Listed in manifest.json's sha256 file list
+    # once published, so it must be fetched in snapshot mode or validation fails. Optional in the
+    # backend load path until present (allow_patterns tolerates absent files).
+    "catalog_tags.json",
     "*.index",
 ]
 

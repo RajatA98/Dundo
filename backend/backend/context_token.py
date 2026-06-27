@@ -179,6 +179,7 @@ def neighbor_context_fragment(
     match_window: tuple[float, float],
     raw_cosine: float,
     criteria: list[dict[str, Any]] | None,
+    evidence_shared: list[dict[str, Any]] | None = None,
 ) -> dict:
     """Build the per-neighbor dict the token embeds. Matches the
     NarrativeContext shape Codex's rag_narrative module expects, minus the
@@ -191,4 +192,7 @@ def neighbor_context_fragment(
         "matchWindow": [float(match_window[0]), float(match_window[1])],
         "rawCosine": float(raw_cosine),
         "criteria": criteria if criteria is not None else [],
+        # Evidence Layer: the gated shared descriptors (genre/instrument/mood) for grounding
+        # the narrative even when MIR criteria are absent.
+        "evidenceShared": evidence_shared if evidence_shared is not None else [],
     }
