@@ -58,13 +58,12 @@ ENV PORT=7860 HF_HOME=/app/.hf_cache
 # flattened container layout (parents[2] of /app/backend/api.py is /, not /app),
 # so override explicitly.
 ENV CORPUS_DIR=/app/quality-scorer/public/corpus
-# Single-thread every native pool (BLAS / OMP / numba). The decode→MuQ→MIR
-# pipeline runs in worker threads serialised by an asyncio semaphore; with these
-# pools uncapped, overlapping uploads oversubscribe the CPU and deadlock on a
-# native lock (the server wedges after one request). Set before the Python
-# process starts so torch/numpy/librosa/numba read them at import time.
-ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-    NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMBA_NUM_THREADS=1
+# numba runs single-threaded: librosa's MIR path is a small fraction of latency
+# but numba's parallel threading layer is the deadlock-prone piece under overlap.
+# torch/BLAS pools stay UNCAPPED so a single MuQ forward pass uses all cores (~7s
+# vs ~40s capped). Safe because the asyncio Semaphore(1) in api.py serialises the
+# whole pipeline — only one inference runs at a time, so nothing oversubscribes.
+ENV NUMBA_NUM_THREADS=1
 EXPOSE 7860
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

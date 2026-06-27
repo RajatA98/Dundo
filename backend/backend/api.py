@@ -78,17 +78,15 @@ if _sentry_dsn:
 # CPU torch isn't reliably thread-safe; serialize CLAP encodes.
 _clap_lock = threading.Lock()
 
-# Native thread pools (torch/BLAS/numba) are capped to 1 via the Dockerfile ENV
-# (OMP_/MKL_/NUMBA_NUM_THREADS, set before the process starts) and, belt-and-
-# suspenders, via torch.set_num_threads(1) inside _warm_model_and_corpus once
-# torch is loaded. Why: the decode→MuQ→MIR pipeline runs in worker threads
-# (run_in_threadpool); with uncapped pools, two overlapping requests oversubscribe
-# the CPU and deadlock on a native lock — the server handles one upload, then
-# wedges on every subsequent one (health stays fine, never touching inference).
-# The _inference_sem below then serialises the whole pipeline so only one runs at
-# a time — no concurrent numba/torch regions. (We deliberately do NOT import torch
-# at module top: doing so eagerly collides with faiss's OpenMP in the test
-# process; the cap is applied at runtime in the warmup thread instead.)
+# The decode→MuQ→MIR pipeline used to run sync on the event loop with uncapped
+# native pools; two overlapping uploads oversubscribed the CPU and deadlocked on
+# a native lock — the server handled one upload then wedged on every subsequent
+# one (health stayed fine, never touching inference). The real fix is the
+# _inference_sem below: it serialises the whole pipeline so only ONE inference
+# runs at a time, which means torch/BLAS can stay multi-threaded (a single
+# forward pass uses all cores, ~7s) without any chance of oversubscription.
+# numba is pinned single-thread via the Dockerfile ENV (NUMBA_NUM_THREADS=1) as
+# cheap insurance against numba's parallel threading layer wedging under overlap.
 
 # Serialise the heavy decode→encode→MIR pipeline: at most one runs at a time,
 # off the event loop (so /health and queued uploads stay responsive). This is
@@ -281,14 +279,6 @@ def _warm_model_and_corpus() -> None:
     global _warm_ready, _warm_started, _warm_error
     try:
         muq_engine.load()
-        # torch is loaded now; cap its intra-op pool to 1 thread so overlapping
-        # inference can't oversubscribe the CPU and deadlock (see _inference_sem).
-        try:
-            import torch
-
-            torch.set_num_threads(1)
-        except Exception as _exc:  # pragma: no cover
-            print(f"[api] torch.set_num_threads skipped: {_exc!r}")
         _load_corpus()
         # Warm the inference path: the first real MuQ forward pass is ~3x slower cold,
         # which can push the first upload past the gateway timeout. Encode 2s of silence
