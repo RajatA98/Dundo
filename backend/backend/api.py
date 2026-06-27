@@ -26,6 +26,7 @@ import io
 import json
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -36,7 +37,6 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from starlette.concurrency import run_in_threadpool
 
 # ADR-0002: clap_engine is no longer the primary encoder; muq_engine took its
 # place via clap_windowed's swap. We still import clap_engine here only because
@@ -78,27 +78,28 @@ if _sentry_dsn:
 # CPU torch isn't reliably thread-safe; serialize CLAP encodes.
 _clap_lock = threading.Lock()
 
-# The decode→MuQ→MIR pipeline used to run sync on the event loop with uncapped
-# native pools; two overlapping uploads oversubscribed the CPU and deadlocked on
-# a native lock — the server handled one upload then wedged on every subsequent
-# one (health stayed fine, never touching inference). The real fix is the
-# _inference_sem below: it serialises the whole pipeline so only ONE inference
-# runs at a time, which means torch/BLAS can stay multi-threaded (a single
-# forward pass uses all cores, ~7s) without any chance of oversubscription.
-# numba is pinned single-thread via the Dockerfile ENV (NUMBA_NUM_THREADS=1) as
-# cheap insurance against numba's parallel threading layer wedging under overlap.
-
-# Serialise the heavy decode→encode→MIR pipeline: at most one runs at a time,
-# off the event loop (so /health and queued uploads stay responsive). This is
-# the lock that actually prevents the concurrent-inference deadlock; _clap_lock
-# (MuQ only) is now subsumed by it but kept as defence in depth.
-_inference_sem = asyncio.Semaphore(1)
+# All MuQ/torch inference runs on ONE dedicated thread (max_workers=1).
+#
+# Why a single dedicated thread and not Starlette's run_in_threadpool:
+#   - Heavy sync inference must run OFF the event loop, or one upload blocks the
+#     loop and every overlapping request (and /health) stalls.
+#   - But torch's OpenMP intra-op pool is bound to the thread that first runs a
+#     forward pass. Starlette's threadpool hands each call a DIFFERENT worker
+#     thread, so the multi-threaded OMP pool deadlocks on the thread-affinity
+#     mismatch — the server wedges on the very first real upload. (Capping
+#     OMP/torch to 1 thread hid this but made each inference ~40s instead of ~7s.)
+#   - A single-worker executor fixes both: every forward pass (warm-up included,
+#     see _warm_model_and_corpus) runs on the SAME thread, so the OMP pool is
+#     created once and reused — multi-threaded (all cores, ~7s) AND deadlock-free.
+#     max_workers=1 also serialises the pipeline, so nothing oversubscribes.
+# numba stays single-thread via the Dockerfile ENV (NUMBA_NUM_THREADS=1).
+_infer_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="infer")
 
 
 async def _run_pipeline(raw: bytes, ext: str) -> dict | JSONResponse:
-    """Run _decode_and_pipeline serialised and off the event loop."""
-    async with _inference_sem:
-        return await run_in_threadpool(_decode_and_pipeline, raw, ext)
+    """Run _decode_and_pipeline on the dedicated inference thread (off the loop)."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_infer_executor, _decode_and_pipeline, raw, ext)
 
 # In-memory corpus for /neighbors. Loaded once at startup.
 _corpus_tracks: list[dict] = []
@@ -275,16 +276,34 @@ def _start_warmup_thread() -> None:
         threading.Thread(target=_warm_model_and_corpus, name="dundo-warmup", daemon=True).start()
 
 
+def _warm_inference_once() -> None:
+    """Run one MuQ encode + one numba MIR compute on 2s of silence.
+
+    Executed on _infer_executor so torch's OpenMP pool and numba's JIT bind to
+    the dedicated inference thread — the same thread every real request uses.
+    """
+    sr = config.AUDIO_ENCODER_SAMPLE_RATE
+    silence = np.zeros(sr * 2, dtype=np.float32)
+    muq_engine.encode_audio(silence, sr)
+    try:
+        mir_features.compute(silence, sr)
+    except Exception as _exc:  # MIR warm-up is best-effort
+        print(f"[api] MIR warm-up skipped: {_exc!r}")
+
+
 def _warm_model_and_corpus() -> None:
     global _warm_ready, _warm_started, _warm_error
     try:
         muq_engine.load()
         _load_corpus()
-        # Warm the inference path: the first real MuQ forward pass is ~3x slower cold,
-        # which can push the first upload past the gateway timeout. Encode 2s of silence
-        # so every real /neighbors hits the warm path.
+        # Warm the inference path ON THE DEDICATED EXECUTOR THREAD. Two reasons:
+        # (1) the first MuQ forward pass + numba MIR JIT are ~3x slower cold, which
+        # could push the first upload past the gateway timeout; (2) crucially, this
+        # binds torch's OpenMP pool (and numba's JIT) to the SAME thread every real
+        # request will run on, so the multi-threaded OMP pool never deadlocks on a
+        # thread-affinity mismatch. Run it through _infer_executor and wait.
         try:
-            muq_engine.encode_audio(np.zeros(config.AUDIO_ENCODER_SAMPLE_RATE * 2, dtype=np.float32), config.AUDIO_ENCODER_SAMPLE_RATE)
+            _infer_executor.submit(_warm_inference_once).result()
         except Exception as _exc:
             print(f"[api] inference warm-up skipped: {_exc!r}")
         _warm_ready = True
