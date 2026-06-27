@@ -68,25 +68,65 @@ export async function analyzeUpload(file) {
  * @returns {Promise<object>} the neighbors response (see shape above)
  * @throws {Error} on non-2xx with the backend's `error` field as the message
  */
+// A single /neighbors request occasionally stalls at the HF Space proxy and
+// never returns (~1 in 8, self-recovering — the backend isn't wedged). Without a
+// client timeout the browser waits indefinitely and the user sees "Load failed".
+// So: cap each attempt with an AbortController and auto-retry transient failures
+// (timeout, network drop, 5xx, 503 warming-up). Deterministic 4xx (bad/oversized
+// file) are NOT retried — retrying the same file can't help. One initial try plus
+// two retries turns a ~12% stall rate into ~0.2%.
+const NEIGHBORS_ATTEMPT_TIMEOUT_MS = 35_000
+const NEIGHBORS_MAX_ATTEMPTS = 3
+
+function _isRetryableStatus(status) {
+  // 408 request timeout, 429 too many, 5xx, plus 503 warming-up (cold Space).
+  return status === 408 || status === 429 || status >= 500
+}
+
 export async function neighborsUpload(file, k = 5) {
-  const fd = new FormData()
-  fd.append('file', file)
   const qs = k === 5 ? '' : `?k=${encodeURIComponent(k)}`
-  const r = await fetch(`${API_BASE}/neighbors${qs}`, {
-    method: 'POST',
-    body: fd,
-  })
-  if (!r.ok) {
-    let detail = ''
+  let lastErr
+  for (let attempt = 1; attempt <= NEIGHBORS_MAX_ATTEMPTS; attempt++) {
+    // Fresh FormData per attempt — a consumed body can't be re-sent.
+    const fd = new FormData()
+    fd.append('file', file)
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), NEIGHBORS_ATTEMPT_TIMEOUT_MS)
     try {
-      const body = await r.json()
-      detail = body?.error || ''
-    } catch {
-      /* not json */
+      const r = await fetch(`${API_BASE}/neighbors${qs}`, {
+        method: 'POST',
+        body: fd,
+        signal: ctrl.signal,
+      })
+      if (r.ok) return await r.json()
+
+      // Deterministic client error (unsupported_media, file_too_large, etc.):
+      // surface immediately, no retry.
+      if (!_isRetryableStatus(r.status)) {
+        let detail = ''
+        try {
+          detail = (await r.json())?.error || ''
+        } catch {
+          /* not json */
+        }
+        const e = new Error(detail || `HTTP ${r.status}`)
+        e.deterministic = true
+        throw e
+      }
+      lastErr = new Error(`HTTP ${r.status}`)
+    } catch (err) {
+      // A tagged deterministic error must not be retried — rethrow as-is.
+      if (err?.deterministic) throw err
+      // AbortError (our timeout) or a network drop → retryable.
+      lastErr = err
+    } finally {
+      clearTimeout(timer)
     }
-    throw new Error(detail || `HTTP ${r.status}`)
+    if (attempt < NEIGHBORS_MAX_ATTEMPTS) {
+      await new Promise((res) => setTimeout(res, 600 * attempt))
+    }
   }
-  return r.json()
+  throw lastErr || new Error('neighbors request failed')
 }
 
 /**
