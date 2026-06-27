@@ -102,7 +102,9 @@ SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
         "genre/instrument/mood descriptors in `sharedDescriptors`. Cite only "
         "tracks, criteria, and values present in the supplied context, and "
         "reference only descriptors listed in `sharedDescriptors` — never invent "
-        "a genre, mood, or instrument. Output a single JSON object matching the "
+        "a genre, mood, or instrument. When neither criteria nor shared descriptors are "
+        "present, ground the explanation in the overall acoustic resemblance and the matched "
+        "section — describe the shared sonic character honestly, without naming a genre. Output a single JSON object matching the "
         "schema. No additional text, no markdown."
     ),
     "creatorAdvice": (
@@ -288,15 +290,21 @@ def _call_openai_json(
 
 
 def _context_gate_reason(context: NarrativeContext) -> str | None:
-    # Proceed when there is SOME groundable evidence — MIR criteria OR shared descriptors.
-    if not context.criteria and not context.evidenceShared:
+    # Proceed when there's SOME grounding: MIR criteria, shared descriptors, OR a strong
+    # acoustic match. A displayed top-3 match is >= the discovery threshold (0.70), so it
+    # always carries the embedding resemblance + matched section to ground on — every shown
+    # match deserves an explanation. Only genuinely weak context (low cosine, nothing else)
+    # short-circuits.
+    if not context.criteria and not context.evidenceShared and float(context.rawCosine) < 0.70:
         return "missing-criteria"
     if not context.title or not context.title.strip():
         return "missing-metadata"
     if not _window_is_valid(context.queryWindow) or not _window_is_valid(context.matchWindow):
         return "missing-metadata"
+    # weak-evidence only applies when criteria EXIST but are uniformly weak.
     if (
-        not any(float(c.agreement) >= 0.55 for c in context.criteria)
+        context.criteria
+        and not any(float(c.agreement) >= 0.55 for c in context.criteria)
         and float(context.rawCosine) < 0.75
         and not context.evidenceShared
     ):
@@ -362,10 +370,10 @@ def _round_numbers(value: Any) -> Any:
 def _citations_are_grounded(citations: list[StructuredCitation], context: NarrativeContext) -> bool:
     criteria = {c.id: c for c in context.criteria}
     if not citations:
-        # A narrative with MIR criteria MUST cite them. But an evidence-only narrative
-        # (no criteria, grounded purely on the shared descriptors in prose) legitimately
-        # carries no structured citations.
-        return not context.criteria and bool(context.evidenceShared)
+        # A narrative with MIR criteria MUST cite them. But criteria-absent narratives —
+        # grounded in prose on the shared descriptors and/or the overall acoustic resemblance
+        # — legitimately carry no structured citations.
+        return not context.criteria
 
     for citation in citations:
         if citation.trackId != context.trackId:

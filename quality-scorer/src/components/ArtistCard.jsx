@@ -162,15 +162,24 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
         <span style={{ flex: 'none', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--color-muted)' }}>{artist.duration || ''}</span>
       </div>
 
-      {/* why this resonates — hidden until the grounded narrative hydrates (or when /narrative is disabled) */}
+      {/* why this resonates — collapsible match explanation; hydrates lazily from /narrative.
+          Every match (>= the discovery threshold) gets one, grounded on the shared sound or,
+          when genres differ, on the acoustic resemblance. */}
       {narrative && (
         <div style={{ marginTop: 22 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-teal)', marginBottom: 9 }}>
-            Why this resonates
-          </div>
-          <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 17, lineHeight: 1.62, color: 'var(--color-ink-soft)', margin: 0, maxWidth: '64ch' }}>
-            {narrative}
-          </p>
+          <button
+            onClick={() => setExpanded((e) => !e)}
+            aria-expanded={expanded}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit', fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-teal)' }}
+          >
+            {expanded ? 'Why this resonates' : 'See why this resonates'}
+            <span style={{ display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', fontSize: 11 }}>▾</span>
+          </button>
+          {expanded && (
+            <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 17, lineHeight: 1.62, color: 'var(--color-ink-soft)', margin: '10px 0 0', maxWidth: '64ch' }}>
+              {narrative}
+            </p>
+          )}
         </div>
       )}
 

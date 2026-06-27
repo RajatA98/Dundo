@@ -240,6 +240,7 @@ def test_wrong_trackid_returns_unavailable() -> None:
 
 def test_low_context_short_circuits_llm() -> None:
     ctx = _context(criteria=[])
+    ctx.rawCosine = 0.5  # genuinely weak: no criteria, no evidence, low cosine -> gated
     with patch("backend.rag_narrative._call_openai_json") as call:
         result = rag_narrative.generate_narrative(
             ctx,
@@ -254,9 +255,12 @@ def test_low_context_short_circuits_llm() -> None:
 
 
 def test_evidence_descriptors_revive_gate_without_criteria() -> None:
-    # criteria empty + no evidence -> gated; criteria empty + shared descriptors -> proceeds
-    assert rag_narrative._context_gate_reason(_context(criteria=[])) == "missing-criteria"
+    # At a WEAK cosine: no criteria + no evidence -> gated; shared descriptors revive it.
+    bare = _context(criteria=[])
+    bare.rawCosine = 0.5
+    assert rag_narrative._context_gate_reason(bare) == "missing-criteria"
     grounded = _context(criteria=[])
+    grounded.rawCosine = 0.5
     grounded.evidenceShared = [{"kind": "genre", "label": "rock", "confidence": 0.6}]
     assert rag_narrative._context_gate_reason(grounded) is None
 
@@ -269,6 +273,25 @@ def test_evidence_only_narrative_passes_with_empty_citations() -> None:
         "kind": "narrative",
         "mode": "whySimilar",
         "prose": "You both live in atmospheric rock — that shared sound is why this resonates.",
+        "citations": [],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="model-sha", catalog_sha="catalog-sha",
+        )
+    assert isinstance(result, NarrativeResponse)
+    call.assert_called_once()
+
+
+def test_strong_acoustic_match_narrates_without_criteria_or_evidence() -> None:
+    # No MIR criteria, no shared descriptors, but a strong acoustic match (rawCosine>=0.70):
+    # every displayed top-3 match deserves an explanation, grounded on the resemblance in prose.
+    ctx = _context(criteria=[])  # helper rawCosine=0.8812
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Your tracks share a similar acoustic character — the resemblance is strongest "
+        "in the matched section.",
         "citations": [],
     }
     with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
