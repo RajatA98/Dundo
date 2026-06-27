@@ -20,6 +20,7 @@ Errors are returned as `{"error": "<code>"}` to match the frontend's `api.js`:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -35,6 +36,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 # ADR-0002: clap_engine is no longer the primary encoder; muq_engine took its
 # place via clap_windowed's swap. We still import clap_engine here only because
@@ -75,6 +77,30 @@ if _sentry_dsn:
 
 # CPU torch isn't reliably thread-safe; serialize CLAP encodes.
 _clap_lock = threading.Lock()
+
+# Native thread pools (torch/BLAS/numba) are capped to 1 via the Dockerfile ENV
+# (OMP_/MKL_/NUMBA_NUM_THREADS, set before the process starts) and, belt-and-
+# suspenders, via torch.set_num_threads(1) inside _warm_model_and_corpus once
+# torch is loaded. Why: the decode→MuQ→MIR pipeline runs in worker threads
+# (run_in_threadpool); with uncapped pools, two overlapping requests oversubscribe
+# the CPU and deadlock on a native lock — the server handles one upload, then
+# wedges on every subsequent one (health stays fine, never touching inference).
+# The _inference_sem below then serialises the whole pipeline so only one runs at
+# a time — no concurrent numba/torch regions. (We deliberately do NOT import torch
+# at module top: doing so eagerly collides with faiss's OpenMP in the test
+# process; the cap is applied at runtime in the warmup thread instead.)
+
+# Serialise the heavy decode→encode→MIR pipeline: at most one runs at a time,
+# off the event loop (so /health and queued uploads stay responsive). This is
+# the lock that actually prevents the concurrent-inference deadlock; _clap_lock
+# (MuQ only) is now subsumed by it but kept as defence in depth.
+_inference_sem = asyncio.Semaphore(1)
+
+
+async def _run_pipeline(raw: bytes, ext: str) -> dict | JSONResponse:
+    """Run _decode_and_pipeline serialised and off the event loop."""
+    async with _inference_sem:
+        return await run_in_threadpool(_decode_and_pipeline, raw, ext)
 
 # In-memory corpus for /neighbors. Loaded once at startup.
 _corpus_tracks: list[dict] = []
@@ -255,6 +281,14 @@ def _warm_model_and_corpus() -> None:
     global _warm_ready, _warm_started, _warm_error
     try:
         muq_engine.load()
+        # torch is loaded now; cap its intra-op pool to 1 thread so overlapping
+        # inference can't oversubscribe the CPU and deadlock (see _inference_sem).
+        try:
+            import torch
+
+            torch.set_num_threads(1)
+        except Exception as _exc:  # pragma: no cover
+            print(f"[api] torch.set_num_threads skipped: {_exc!r}")
         _load_corpus()
         # Warm the inference path: the first real MuQ forward pass is ~3x slower cold,
         # which can push the first upload past the gateway timeout. Encode 2s of silence
@@ -529,7 +563,7 @@ async def analyze_endpoint(file: UploadFile = File(...)):
     if (err := _validate_upload(file, raw)) is not None:
         return err
     ext = Path(file.filename or "").suffix.lower()
-    pipeline = _decode_and_pipeline(raw, ext=ext)
+    pipeline = await _run_pipeline(raw, ext)
     if isinstance(pipeline, JSONResponse):
         return pipeline
     return _build_track(file, pipeline, source="upload", id_="upload")
@@ -548,7 +582,7 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
     # re-uploads of the same file; cheap to compute.
     query_fingerprint = hashlib.sha256(raw).hexdigest()
     ext = Path(file.filename or "").suffix.lower()
-    pipeline = _decode_and_pipeline(raw, ext=ext)
+    pipeline = await _run_pipeline(raw, ext)
     if isinstance(pipeline, JSONResponse):
         return pipeline
     query_track = _build_track(file, pipeline, source="upload", id_="upload")
