@@ -116,7 +116,11 @@ SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
         "present, AND the shared genre/instrument/mood descriptors in "
         "`sharedDescriptors`. Cite only tracks, criteria, and values present in "
         "the supplied context, and reference only descriptors listed in "
-        "`sharedDescriptors` — never invent a genre, mood, or instrument. Output "
+        "`sharedDescriptors` — never invent a genre, mood, or instrument. When "
+        "neither criteria nor shared descriptors are present, ground the "
+        "suggestions in the overall acoustic resemblance and the matched section — "
+        "speak to the shared sonic character honestly, without naming a genre, and "
+        "do not cite criteria that aren't present (return empty citations). Output "
         "a single JSON object matching the schema. No additional text, no markdown."
     ),
 }
@@ -143,7 +147,7 @@ Return JSON with exactly this shape:
   ]
 }}
 
-Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made. For creatorAdvice, write three concrete suggestion-style clauses in prose, each tied to a cited criterion.
+Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made. For creatorAdvice, write three concrete suggestion-style clauses in prose, each tied to the supplied evidence — a cited criterion when criteria are present, otherwise a shared descriptor or the overall acoustic resemblance (with empty citations).
 
 Context:
 {context_json}

@@ -302,6 +302,47 @@ def test_strong_acoustic_match_narrates_without_criteria_or_evidence() -> None:
     call.assert_called_once()
 
 
+def test_creator_advice_evidence_only_passes_with_empty_citations() -> None:
+    # creatorAdvice grounded purely on shared descriptors (no MIR) — like whySimilar,
+    # empty citations are valid and the gate must not reject it.
+    ctx = _context(criteria=[])
+    ctx.evidenceShared = [{"kind": "genre", "label": "pop", "confidence": 0.6}]
+    payload = {
+        "kind": "narrative",
+        "mode": "creatorAdvice",
+        "prose": "Lean further into your atmospheric pop edge, vary the rhythm to set "
+        "yourself apart, and foreground a signature texture the shared sound doesn't have.",
+        "citations": [],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(
+            ctx, "creatorAdvice", model_sha="model-sha", catalog_sha="catalog-sha",
+        )
+    assert isinstance(result, NarrativeResponse)
+    assert result.mode == "creatorAdvice"
+    call.assert_called_once()
+
+
+def test_creator_advice_acoustic_only_passes_with_empty_citations() -> None:
+    # No MIR criteria, no shared descriptors, strong acoustic match: creatorAdvice
+    # must still narrate (grounded on the resemblance) rather than gate/hallucinate.
+    ctx = _context(criteria=[])  # helper rawCosine=0.8812
+    payload = {
+        "kind": "narrative",
+        "mode": "creatorAdvice",
+        "prose": "Push the contrast where your tracks resemble each other most — shift the "
+        "arrangement in the matched section, add a distinctive motif, and tighten your dynamics.",
+        "citations": [],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(
+            ctx, "creatorAdvice", model_sha="model-sha", catalog_sha="catalog-sha",
+        )
+    assert isinstance(result, NarrativeResponse)
+    assert result.mode == "creatorAdvice"
+    call.assert_called_once()
+
+
 def test_cache_key_stable_under_key_reordering() -> None:
     ctx_a = _context()
     ctx_b = _context(criteria=list(reversed(ctx_a.criteria)))

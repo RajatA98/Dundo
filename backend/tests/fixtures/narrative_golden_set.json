@@ -96,6 +96,44 @@
       "expected_reason": null
     },
     {
+      "name": "happy_path_creatoradvice_evidence_only",
+      "category": "happy_path",
+      "description": "creatorAdvice with NO MIR criteria, grounded on shared descriptors → narrative with empty citations (the evidence/acoustic fallback added for our MIR-less catalog).",
+      "mode": "creatorAdvice",
+      "context": {
+        "queryFingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "trackId": "tier2:jamendo:975526",
+        "title": "Small Hours",
+        "artist": "Maya Lev",
+        "queryWindow": [
+          20.0,
+          30.0
+        ],
+        "matchWindow": [
+          10.0,
+          20.0
+        ],
+        "rawCosine": 0.79,
+        "criteria": [],
+        "evidenceShared": [
+          {
+            "kind": "genre",
+            "label": "pop",
+            "confidence": 0.62
+          }
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "creatorAdvice",
+        "prose": "Lean further into your atmospheric pop edge, vary the rhythm so your track stands apart, and foreground one signature texture the shared sound doesn't have.",
+        "citations": []
+      },
+      "expected_kind": "narrative",
+      "expected_reason": null
+    },
+    {
       "name": "happy_path_creatoradvice",
       "category": "happy_path",
       "description": "Same context, different mode \u2192 creator advice narrative.",

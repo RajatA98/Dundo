@@ -10,15 +10,21 @@ const LABEL_DISPLAY = {
 }
 const formatLabel = (s) => LABEL_DISPLAY[s] || s
 
-// Deterministic "why" used ONLY when the LLM narrative is unavailable after
-// retries, so every surfaced match always carries an honest explanation. Prefers
-// the real shared descriptors; otherwise uses the acoustic-resemblance framing
-// the backend itself emits for strong matches with no shared tags. Never fabricates.
-function fallbackNarrative(artist) {
+// Deterministic narrative used ONLY when the LLM one is unavailable after retries,
+// so every tab always carries an honest explanation. Prefers the real shared
+// descriptors; otherwise uses the acoustic-resemblance framing the backend itself
+// emits for strong matches with no shared tags. Never fabricates.
+function fallbackNarrative(artist, mode = 'whySimilar') {
   const shared = (artist?.evidenceTags?.shared || [])
     .map((t) => formatLabel(t.label))
     .filter(Boolean)
   const who = artist?.name || 'this artist'
+  if (mode === 'creatorAdvice') {
+    if (shared.length) {
+      return `You both lean on ${shared.slice(0, 3).join(', ')} — to stand apart, push a contrast in rhythm or arrangement and foreground one signature texture the shared sound doesn't have.`
+    }
+    return `Your track and ${who}'s share a close sonic character — to make yours more distinctive, vary the arrangement where they resemble each other most and lean into a motif that's yours alone.`
+  }
   if (shared.length) {
     return `You and ${who} share ${shared.slice(0, 3).join(', ')} — that common sonic ground is what surfaced this match.`
   }
@@ -40,28 +46,36 @@ const MAX_CHIPS = 4
 export default function ArtistCard({ artist, contextToken = null, defaultExpanded = false }) {
   const [playing, setPlaying] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded)
-  const [narrative, setNarrative] = useState(artist.narrative || null)
+  const [mode, setMode] = useState('whySimilar')
+  // One narrative per mode, cached. whySimilar loads on mount (drives the
+  // toggle's visibility); creatorAdvice loads lazily when the user opens that tab.
+  const [narratives, setNarratives] = useState(() =>
+    artist.narrative ? { whySimilar: artist.narrative } : {},
+  )
+  const narrative = narratives[mode] || null
 
-  // Lazy "why this resonates" (ADR-0005): the artist response leaves narrative
-  // null; hydrate it from /narrative with the winning track id + the signed
-  // contextToken. Static/sample data (narrative already present) skips the fetch.
+  // Lazy narrative (ADR-0005): hydrate the active mode from /narrative with the
+  // winning track id + the signed contextToken. fetchNarrative retries the
+  // non-deterministic citation gate; fallbackNarrative guarantees every mode
+  // resolves to honest prose so a tab is never blank.
   useEffect(() => {
-    if (narrative || !contextToken || !artist.representativeTrackId) return
+    if (narratives[mode] || !contextToken || !artist.representativeTrackId) return
     let cancelled = false
-    fetchNarrative(contextToken, artist.representativeTrackId, 'whySimilar')
+    fetchNarrative(contextToken, artist.representativeTrackId, mode)
       .then((res) => {
         if (cancelled) return
-        if (res && res.kind === 'narrative' && res.prose) setNarrative(res.prose)
-        else setNarrative(fallbackNarrative(artist)) // unavailable after retries → honest fallback
+        const prose =
+          res && res.kind === 'narrative' && res.prose ? res.prose : fallbackNarrative(artist, mode)
+        setNarratives((m) => ({ ...m, [mode]: prose }))
       })
       .catch(() => {
-        if (!cancelled) setNarrative(fallbackNarrative(artist))
+        if (!cancelled) setNarratives((m) => ({ ...m, [mode]: fallbackNarrative(artist, mode) }))
       })
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextToken, artist.representativeTrackId])
+  }, [mode, contextToken, artist.representativeTrackId])
 
   // Real audio preview — play/pause the artist's representative track (previewUrl
   // is the streamable host mp3). Cross-origin <audio> playback needs no CORS.
@@ -181,10 +195,11 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
         <span style={{ flex: 'none', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--color-muted)' }}>{artist.duration || ''}</span>
       </div>
 
-      {/* why this resonates — collapsible match explanation; hydrates lazily from /narrative.
-          Every match (>= the discovery threshold) gets one, grounded on the shared sound or,
+      {/* match explanation — collapsible; hydrates lazily from /narrative. Two modes:
+          "Why it resonates" (whySimilar) and "For your craft" (creatorAdvice). Every
+          match (>= the discovery threshold) gets one, grounded on the shared sound or,
           when genres differ, on the acoustic resemblance. */}
-      {narrative && (
+      {narratives.whySimilar && (
         <div style={{ marginTop: 22 }}>
           <button
             onClick={() => setExpanded((e) => !e)}
@@ -195,9 +210,41 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
             <span style={{ display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', fontSize: 11 }}>▾</span>
           </button>
           {expanded && (
-            <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 17, lineHeight: 1.62, color: 'var(--color-ink-soft)', margin: '10px 0 0', maxWidth: '64ch' }}>
-              {narrative}
-            </p>
+            <div style={{ marginTop: 12 }}>
+              <div role="tablist" style={{ display: 'flex', gap: 6 }}>
+                {[
+                  ['whySimilar', 'Why it resonates'],
+                  ['creatorAdvice', 'For your craft'],
+                ].map(([m, label]) => {
+                  const active = mode === m
+                  return (
+                    <button
+                      key={m}
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setMode(m)}
+                      style={{
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        padding: '5px 12px',
+                        borderRadius: 999,
+                        border: active ? '1px solid var(--color-teal)' : '1px solid var(--color-line)',
+                        background: active ? 'var(--color-teal)' : 'transparent',
+                        color: active ? '#fff' : 'var(--color-muted)',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+              <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 17, lineHeight: 1.62, color: 'var(--color-ink-soft)', margin: '12px 0 0', maxWidth: '64ch' }}>
+                {narrative || 'Reading the match…'}
+              </p>
+            </div>
           )}
         </div>
       )}
