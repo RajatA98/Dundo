@@ -141,7 +141,7 @@ def test_openai_call_uses_strict_json_schema_and_larger_token_budget() -> None:
     schema_payload = kwargs["response_format"]["json_schema"]
     assert schema_payload["strict"] is True
     assert schema_payload["schema"]["additionalProperties"] is False
-    assert set(schema_payload["schema"]["required"]) == {"kind", "mode", "prose", "citations", "factCitations"}
+    assert set(schema_payload["schema"]["required"]) == {"kind", "mode", "prose", "citations", "factCitations", "promptSnippet"}
     # citedValues is now a list of fixed-shape {name,value} objects (not an open
     # dict) so the schema is OpenAI-strict-valid. See test_strict_schema.py.
     cited_values_schema = schema_payload["schema"]["$defs"]["StructuredCitation"]["properties"]["citedValues"]
@@ -429,6 +429,41 @@ def test_empty_fact_citations_always_ok() -> None:
         )
     assert isinstance(result, NarrativeResponse)
     call.assert_called_once()
+
+
+def test_creator_coach_returns_prompt_snippet() -> None:
+    # The Suno coach (creatorAdvice) grounds on queryDescriptors and returns a
+    # structured, copyable promptSnippet (style + lyricsTags + workflowTip).
+    ctx = _context(criteria=[])
+    ctx.queryDescriptors = {"tempoBpm": 92, "key": "G", "mode": "minor", "genres": ["dream pop"], "moods": ["dreamy"]}
+    payload = {
+        "kind": "narrative",
+        "mode": "creatorAdvice",
+        "prose": "Your track reads as dreamy dream-pop at ~92 BPM. To resonate more, open the "
+        "verse and lift the chorus; to stand out, swap in one signature timbre. Suno guides — "
+        "it won't guarantee, so expect a couple of re-rolls.",
+        "citations": [],
+        "factCitations": [],
+        "promptSnippet": {
+            "style": "dream-pop, hazy, analog synth pads, breathy vocal, 92 BPM",
+            "lyricsTags": ["[Verse]", "[Build-Up]", "[Chorus]", "[Energy: High]"],
+            "workflowTip": "Use Replace Section on the chorus, then export Stems to re-record the lead.",
+        },
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(ctx, "creatorAdvice", model_sha="m", catalog_sha="c")
+    assert isinstance(result, NarrativeResponse)
+    assert result.promptSnippet.style.startswith("dream-pop")
+    assert "[Chorus]" in result.promptSnippet.lyricsTags
+    assert result.promptSnippet.workflowTip
+    call.assert_called_once()
+
+
+def test_suno_kb_injected_into_creator_advice_only() -> None:
+    coach = rag_narrative._system_prompt("creatorAdvice")
+    why = rag_narrative._system_prompt("whySimilar")
+    assert "SUNO COACHING KNOWLEDGE BASE" in coach
+    assert "SUNO COACHING KNOWLEDGE BASE" not in why
 
 
 def test_cache_key_stable_under_key_reordering() -> None:

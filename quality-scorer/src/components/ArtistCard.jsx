@@ -10,6 +10,47 @@ const LABEL_DISPLAY = {
 }
 const formatLabel = (s) => LABEL_DISPLAY[s] || s
 
+// Suno coach output — a copyable Style line + Lyrics-box metatags + a workflow tip.
+function PromptSnippet({ snippet }) {
+  const [copied, setCopied] = useState(false)
+  const tags = (snippet.lyricsTags || []).join(' ')
+  const copyText = [
+    snippet.style && `Style: ${snippet.style}`,
+    tags && `Lyrics: ${tags}`,
+    snippet.workflowTip && `Workflow: ${snippet.workflowTip}`,
+  ].filter(Boolean).join('\n')
+  const copy = () => {
+    navigator.clipboard?.writeText(copyText).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 1600) },
+      () => {},
+    )
+  }
+  const label = (t) => (
+    <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-faint)', marginBottom: 4 }}>{t}</div>
+  )
+  const code = (t) => (
+    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.5, color: 'var(--color-ink-soft)', wordBreak: 'break-word' }}>{t}</div>
+  )
+  return (
+    <div style={{ marginTop: 14, border: '1px solid var(--color-line)', borderRadius: 12, background: 'var(--color-wash)', padding: '14px 16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-teal)' }}>Try this in Suno</span>
+        <button
+          onClick={copy}
+          style={{ cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 999, border: '1px solid var(--color-teal)', background: copied ? 'var(--color-teal)' : 'transparent', color: copied ? '#fff' : 'var(--color-teal)', transition: 'all 0.15s' }}
+        >
+          {copied ? 'Copied ✓' : 'Copy'}
+        </button>
+      </div>
+      {snippet.style && <div style={{ marginBottom: 10 }}>{label('Style field')}{code(snippet.style)}</div>}
+      {tags && <div style={{ marginBottom: snippet.workflowTip ? 10 : 0 }}>{label('Lyrics box')}{code(tags)}</div>}
+      {snippet.workflowTip && (
+        <div>{label('Workflow')}<div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--color-ink-soft)' }}>{snippet.workflowTip}</div></div>
+      )}
+    </div>
+  )
+}
+
 // Deterministic narrative used ONLY when the LLM one is unavailable after retries,
 // so every tab always carries an honest explanation. Prefers the real shared
 // descriptors; otherwise uses the acoustic-resemblance framing the backend itself
@@ -47,12 +88,14 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
   const [playing, setPlaying] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [mode, setMode] = useState('whySimilar')
-  // One narrative per mode, cached. whySimilar loads on mount (drives the
-  // toggle's visibility); creatorAdvice loads lazily when the user opens that tab.
+  // One narrative per mode, cached as { prose, snippet }. whySimilar loads on mount
+  // (drives the toggle's visibility); creatorAdvice (the Suno coach) loads lazily when
+  // the user opens that tab and carries a structured, copyable promptSnippet.
   const [narratives, setNarratives] = useState(() =>
-    artist.narrative ? { whySimilar: artist.narrative } : {},
+    artist.narrative ? { whySimilar: { prose: artist.narrative, snippet: null } } : {},
   )
-  const narrative = narratives[mode] || null
+  const narrative = narratives[mode]?.prose || null
+  const snippet = narratives[mode]?.snippet || null
 
   // Lazy narrative (ADR-0005): hydrate the active mode from /narrative with the
   // winning track id + the signed contextToken. fetchNarrative retries the
@@ -64,12 +107,18 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
     fetchNarrative(contextToken, artist.representativeTrackId, mode)
       .then((res) => {
         if (cancelled) return
-        const prose =
-          res && res.kind === 'narrative' && res.prose ? res.prose : fallbackNarrative(artist, mode)
-        setNarratives((m) => ({ ...m, [mode]: prose }))
+        const ok = res && res.kind === 'narrative' && res.prose
+        setNarratives((m) => ({
+          ...m,
+          [mode]: {
+            prose: ok ? res.prose : fallbackNarrative(artist, mode),
+            snippet: ok ? res.promptSnippet || null : null,
+          },
+        }))
       })
       .catch(() => {
-        if (!cancelled) setNarratives((m) => ({ ...m, [mode]: fallbackNarrative(artist, mode) }))
+        if (!cancelled)
+          setNarratives((m) => ({ ...m, [mode]: { prose: fallbackNarrative(artist, mode), snippet: null } }))
       })
     return () => {
       cancelled = true
@@ -244,6 +293,9 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
               <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 17, lineHeight: 1.62, color: 'var(--color-ink-soft)', margin: '12px 0 0', maxWidth: '64ch' }}>
                 {narrative || 'Reading the match…'}
               </p>
+              {mode === 'creatorAdvice' && snippet && (snippet.style || (snippet.lyricsTags || []).length > 0) && (
+                <PromptSnippet snippet={snippet} />
+              )}
             </div>
           )}
         </div>

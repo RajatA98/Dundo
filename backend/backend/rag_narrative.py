@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, ValidationError
@@ -19,12 +20,29 @@ from pydantic import BaseModel, Field, ValidationError
 NarrativeMode = Literal["whySimilar", "creatorAdvice"]
 CriterionId = Literal["tempo", "key", "harmonic", "timbre"]
 
-RESPONSE_SCHEMA_VERSION = "v2"  # v2: artistKnowledge grounding + typed factCitations
+RESPONSE_SCHEMA_VERSION = "v3"  # v3: creatorAdvice Suno coach — queryDescriptors + promptSnippet
 CRITERIA_ALGORITHM_VERSION = "adr-0004-v1"
-MAX_PROMPT_CHARS = 8000
+MAX_PROMPT_CHARS = 14000  # raised for the cached Suno-coach KB injected into creatorAdvice
 MAX_COMPLETION_TOKENS = 1000
 
 logger = logging.getLogger(__name__)
+
+
+def _load_suno_kb() -> str:
+    """Load the Suno coaching knowledge base once (cached). Injected into the
+    creatorAdvice system prompt as grounding. Empty string if the file is absent."""
+    global _SUNO_KB
+    if _SUNO_KB is not None:
+        return _SUNO_KB
+    try:
+        _SUNO_KB = (Path(__file__).parent / "knowledge" / "suno_coach.md").read_text(encoding="utf-8")
+    except Exception as exc:  # pragma: no cover
+        logger.warning("suno_coach KB not loaded: %r", exc)
+        _SUNO_KB = ""
+    return _SUNO_KB
+
+
+_SUNO_KB: str | None = None
 
 
 class CriterionContext(BaseModel):
@@ -57,6 +75,11 @@ class NarrativeContext(BaseModel):
     # means "no catalog facts": the narrative stays acoustic/evidence-only and may
     # make NO artist-context claims.
     artistKnowledge: dict = Field(default_factory=dict)
+    # creatorAdvice (Suno coach) — the UPLOAD's own detected descriptors:
+    #   {tempoBpm, key, mode, genres:[...], moods:[...]}. INFERRED from audio + neighbor
+    #   tags, not ground truth — the coach must hedge ("your track reads as…"). Empty {}
+    #   for whySimilar / when unavailable.
+    queryDescriptors: dict = Field(default_factory=dict)
 
 
 class CitedValue(BaseModel):
@@ -90,6 +113,16 @@ class FactCitation(BaseModel):
     value: str
 
 
+class PromptSnippet(BaseModel):
+    # creatorAdvice (Suno coach) — a copyable, ready-to-paste Suno artifact. Empty for
+    # whySimilar. `style` = the Style-field line; `lyricsTags` = bracketed structure
+    # metatags for the Lyrics box; `workflowTip` = a Suno workflow move (Extend /
+    # Replace Section / Stems / Exclude Styles), not just a prompt string.
+    style: str = ""
+    lyricsTags: list[str] = Field(default_factory=list)
+    workflowTip: str = ""
+
+
 class NarrativeResponse(BaseModel):
     kind: Literal["narrative"] = "narrative"
     mode: NarrativeMode
@@ -98,6 +131,8 @@ class NarrativeResponse(BaseModel):
     # Optional in Pydantic (older mocks omit it) but the strict OpenAI schema marks
     # it required, so live calls always return it (possibly empty).
     factCitations: list[FactCitation] = Field(default_factory=list)
+    # creatorAdvice only — the structured copyable Suno snippet (empty for whySimilar).
+    promptSnippet: PromptSnippet = Field(default_factory=PromptSnippet)
 
 
 class LowConfidence(BaseModel):
@@ -148,23 +183,38 @@ SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
         "schema. No additional text, no markdown."
     ),
     "creatorAdvice": (
-        "You are Dundo, a warm music-discovery assistant helping creators make "
-        "their upload feel more distinctive from a matched catalog artist. You "
-        "receive structured metadata about the uploaded audio and the artist "
-        "match; you do not hear the audio. Ground every suggestion in the "
-        "supplied evidence: the tempo, key, harmonic, and timbre criteria when "
-        "present, AND the shared genre/instrument/mood descriptors in "
-        "`sharedDescriptors`. Cite only tracks, criteria, and values present in "
-        "the supplied context, and reference only descriptors listed in "
-        "`sharedDescriptors` — never invent a genre, mood, or instrument. When "
-        "neither criteria nor shared descriptors are present, ground the "
-        "suggestions in the overall acoustic resemblance and the matched section — "
-        "speak to the shared sonic character honestly, without naming a genre, and "
-        "do not cite criteria that aren't present (return empty citations). "
-        + _ARTIST_KNOWLEDGE_RULE
-        + " Output a single JSON object matching the schema. No additional text, no markdown."
+        "You are Dundo's Suno coach — a warm music + Suno expert helping a creator improve "
+        "the AI-generated track they uploaded. You do not hear the audio; you receive the "
+        "track's DETECTED descriptors in `queryDescriptors` (tempo, key/mode, inferred "
+        "genre/mood tags). These are INFERRED from the audio and its acoustic neighbors, "
+        "NOT ground truth — so hedge: say 'your track reads as…' or 'Dundo detected…', "
+        "never 'your song is definitely…'. Use the SUNO COACHING KNOWLEDGE BASE below as "
+        "your expertise, and tailor to the creator's likely intent. "
+        "Give exactly TWO moves in `prose`: (1) a 'make it resonate more' idea "
+        "(emotional / hook / dynamics), and (2) a 'make it stand out' idea "
+        "(distinctive / less-AI). Keep it warm, plain, and tied to the detected "
+        "descriptors. Then fill `promptSnippet` with ONE consolidated, copyable Suno "
+        "artifact: `style` (a Style-field line of comma-separated descriptors), "
+        "`lyricsTags` (a few bracketed structure metatags like [Verse], [Build-Up], "
+        "[Chorus]), and `workflowTip` (a Suno workflow move — Extend, Replace Section, "
+        "Stems, or Exclude Styles — not just a prompt string). "
+        "Set `citations` to [] and `factCitations` to [] — you cite no MIR criteria and "
+        "assert no facts about any matched artist. End the prose with a brief honest "
+        "reminder that Suno prompts guide the output, they don't guarantee it. "
+        "Output a single JSON object matching the schema. No additional text, no markdown."
     ),
 }
+
+
+def _system_prompt(mode: NarrativeMode) -> str:
+    """The mode's system prompt, with the cached Suno KB appended for creatorAdvice
+    only. Used for both the live call and the cache-key hash so they stay consistent."""
+    base = SYSTEM_PROMPTS[mode]
+    if mode == "creatorAdvice":
+        kb = _load_suno_kb()
+        if kb:
+            return f"{base}\n\n--- SUNO COACHING KNOWLEDGE BASE ---\n{kb}"
+    return base
 
 USER_PROMPT_TEMPLATE = """Mode: {mode}
 
@@ -188,10 +238,11 @@ Return JSON with exactly this shape:
   ],
   "factCitations": [
     {{"type": "location|tag|similarArtist", "value": "exact value drawn from artistKnowledge"}}
-  ]
+  ],
+  "promptSnippet": {{"style": "Suno Style-field line (creatorAdvice only, else empty)", "lyricsTags": ["[Verse]", "[Chorus]"], "workflowTip": "a Suno workflow move"}}
 }}
 
-`citations` carry numeric/criterion evidence; `factCitations` carry artist facts (one per artist fact you state in prose). Use [] for either when you cite nothing of that kind. IMPORTANT: if the context's `criteria` array is empty, `citations` MUST be [] — never invent a tempo/key/timestamp citation. Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made. For creatorAdvice, write three concrete suggestion-style clauses in prose, each tied to the supplied evidence — a cited criterion when criteria are present, otherwise a shared descriptor or the overall acoustic resemblance (with empty citations).
+`citations` carry numeric/criterion evidence; `factCitations` carry artist facts (one per artist fact you state in prose). Use [] for either when you cite nothing of that kind. IMPORTANT: if the context's `criteria` array is empty, `citations` MUST be [] — never invent a tempo/key/timestamp citation. Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made, and leave `promptSnippet` empty (style "", lyricsTags [], workflowTip ""). For creatorAdvice, follow the Suno-coach instructions: two moves in `prose` (resonate + stand out) grounded in `queryDescriptors`, and fill `promptSnippet` with the copyable Suno artifact.
 
 Context:
 {context_json}
@@ -224,6 +275,8 @@ def cache_key(
         ),
         # artistKnowledge is prompt-relevant context, so it must affect the cache key.
         "artist_knowledge": _round_numbers(context.artistKnowledge),
+        # queryDescriptors (creatorAdvice Suno coach) is prompt-relevant too.
+        "query_descriptors": _round_numbers(context.queryDescriptors),
         "raw_cosine": round(float(context.rawCosine), 3),
     }
     return _sha256_json(payload)
@@ -257,7 +310,7 @@ def generate_narrative(
     if gate_reason is not None:
         return finish(LowConfidence(reason=gate_reason), gate_result=gate_reason, success=False)
 
-    system_prompt = SYSTEM_PROMPTS[mode]
+    system_prompt = _system_prompt(mode)
     user_prompt = _build_user_prompt(context, mode)
     if len(system_prompt) + len(user_prompt) > MAX_PROMPT_CHARS:
         return finish(
@@ -388,6 +441,7 @@ def _build_user_prompt(context: NarrativeContext, mode: NarrativeMode) -> str:
         "criteria": [_criterion_for_prompt(c) for c in sorted(context.criteria, key=lambda c: c.id)],
         "sharedDescriptors": context.evidenceShared,
         "artistKnowledge": context.artistKnowledge,
+        "queryDescriptors": context.queryDescriptors,
         "acrcloudCoverSongId": context.acrcloudCoverSongId,
     }
     return USER_PROMPT_TEMPLATE.format(
@@ -524,7 +578,7 @@ def _numeric_close(actual: Any, expected: Any, *, tolerance: float) -> bool:
 
 
 def _prompt_template_hash(mode: NarrativeMode) -> str:
-    return hashlib.sha256((SYSTEM_PROMPTS[mode] + "\n" + USER_PROMPT_TEMPLATE).encode("utf-8")).hexdigest()
+    return hashlib.sha256((_system_prompt(mode) + "\n" + USER_PROMPT_TEMPLATE).encode("utf-8")).hexdigest()
 
 
 def _sha256_json(payload: dict[str, Any]) -> str:

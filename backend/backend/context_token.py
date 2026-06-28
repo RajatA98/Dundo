@@ -39,7 +39,7 @@ import hmac
 import json
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 DEFAULT_TTL_SECONDS = 1800  # 30 minutes — long enough for a UI session, short
@@ -63,6 +63,9 @@ class VerifiedToken:
     expiresAt: int
     acrcloudCoverSongId: dict | None
     neighbors: dict[str, dict]
+    # creatorAdvice Suno coach — the upload's detected descriptors, signed at the token
+    # top level (identical for all matches). {} on older tokens / when unavailable.
+    queryDescriptors: dict = field(default_factory=dict)
 
 
 def _hmac_key() -> bytes:
@@ -79,6 +82,7 @@ def issue(
     catalog_sha: str,
     neighbors: dict[str, dict],
     acrcloud_cover_song_id: dict | None = None,
+    query_descriptors: dict | None = None,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
     now: int | None = None,
 ) -> str:
@@ -96,6 +100,7 @@ def issue(
         "catalogSha": catalog_sha,
         "expiresAt": now_ts + ttl_seconds,
         "acrcloudCoverSongId": acrcloud_cover_song_id,
+        "queryDescriptors": query_descriptors if query_descriptors is not None else {},
         "neighbors": neighbors,
     }
     body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -160,6 +165,7 @@ def verify(
         catalogSha=str(payload["catalogSha"]),
         expiresAt=int(payload["expiresAt"]),
         acrcloudCoverSongId=payload.get("acrcloudCoverSongId"),
+        queryDescriptors=dict(payload.get("queryDescriptors") or {}),
         neighbors=dict(payload["neighbors"]),
     )
 

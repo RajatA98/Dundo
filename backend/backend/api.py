@@ -594,7 +594,26 @@ def _artist_knowledge_for(track_id: str, match) -> dict:
     return ak
 
 
-def _issue_context_token_for_neighbors(query_fingerprint: str, neighbors: list[dict]) -> str | None:
+def _compact_query_descriptors(query_summary: dict) -> dict:
+    """Compact subset of querySummary for the Suno coach (signed into the token):
+    tempo, key/mode, and the upload's top inferred genre/mood tags."""
+    tags = query_summary.get("tags") or {}
+    out: dict = {}
+    for k in ("tempoBpm", "key", "mode"):
+        if query_summary.get(k):
+            out[k] = query_summary[k]
+    genres = [t["label"] for t in (tags.get("genre") or [])[:3] if t.get("label")]
+    moods = [t["label"] for t in (tags.get("mood") or [])[:3] if t.get("label")]
+    if genres:
+        out["genres"] = genres
+    if moods:
+        out["moods"] = moods
+    return out
+
+
+def _issue_context_token_for_neighbors(
+    query_fingerprint: str, neighbors: list[dict], query_descriptors: dict | None = None
+) -> str | None:
     if not neighbors or not context_token.is_configured():
         return None
     neighbor_fragments: dict[str, dict] = {}
@@ -623,6 +642,7 @@ def _issue_context_token_for_neighbors(query_fingerprint: str, neighbors: list[d
         model_sha=_model_sha or "unpinned",
         catalog_sha=_catalog_sha or "no-catalog",
         neighbors=neighbor_fragments,
+        query_descriptors=query_descriptors,
     )
 
 
@@ -802,13 +822,18 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
         matches.append(match)
         winning_neighbors.append(nb)
 
-    ctx_token = _issue_context_token_for_neighbors(query_fingerprint, winning_neighbors)
     # "Your song's stats": honest snapshot of the upload (tempo/key/duration/energy +
     # its real k-NN-propagated genre/mood/instrument tags, voted over all neighbors).
     tag_profile = (
         evidence_tags.assemble_query_profile(ev_neighbors, _catalog_tags) if ev_neighbors else {}
     )
     query_summary = _build_query_summary(pipeline, tag_profile)
+    # The Suno coach grounds on the upload's detected descriptors — signed top-level in
+    # the token (identical for all matches), per Codex's review of CODEX_SUNO_COACH.md.
+    query_descriptors = _compact_query_descriptors(query_summary)
+    ctx_token = _issue_context_token_for_neighbors(
+        query_fingerprint, winning_neighbors, query_descriptors
+    )
     return ArtistNeighborsResponse(
         matches=matches, contextToken=ctx_token, querySummary=query_summary
     ).model_dump()
@@ -947,6 +972,7 @@ async def narrative_endpoint(req: NarrativeRequest):
                 ],
                 evidenceShared=fragment.get("evidenceShared") or [],
                 artistKnowledge=fragment.get("artistKnowledge") or {},
+                queryDescriptors=verified.queryDescriptors or {},
                 acrcloudCoverSongId=verified.acrcloudCoverSongId,
             )
         except Exception:
