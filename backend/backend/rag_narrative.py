@@ -379,6 +379,11 @@ def _openai_client_and_traced() -> tuple[Any, bool]:
     import os
 
     if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+        # The Langfuse SDK reads LANGFUSE_HOST for the region; some setups (and the CLI)
+        # use LANGFUSE_BASE_URL. Bridge them so US/EU keys reach the right region instead
+        # of silently defaulting to EU (skill guidance). Must run before the import below.
+        if not os.getenv("LANGFUSE_HOST") and os.getenv("LANGFUSE_BASE_URL"):
+            os.environ["LANGFUSE_HOST"] = os.environ["LANGFUSE_BASE_URL"]
         try:
             from langfuse.openai import OpenAI  # drop-in: auto-traces to Langfuse
 
