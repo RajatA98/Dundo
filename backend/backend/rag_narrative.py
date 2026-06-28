@@ -17,7 +17,10 @@ from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, ValidationError
 
-NarrativeMode = Literal["whySimilar", "creatorAdvice"]
+NarrativeMode = Literal["whySimilar", "creatorAdvice", "craftResonate", "craftUnique"]
+# The Suno-coach modes (get the KB injected + return a promptSnippet). whySimilar is
+# the discovery explanation; creatorAdvice is the legacy combined coach.
+COACH_MODES = frozenset({"creatorAdvice", "craftResonate", "craftUnique"})
 CriterionId = Literal["tempo", "key", "harmonic", "timbre"]
 
 RESPONSE_SCHEMA_VERSION = "v3"  # v3: creatorAdvice Suno coach — queryDescriptors + promptSnippet
@@ -166,6 +169,29 @@ _ARTIST_KNOWLEDGE_RULE = (
     "`value` drawn from `artistKnowledge`."
 )
 
+def _coach_prompt(focus: str) -> str:
+    """A focused Suno-coach system prompt. `focus` is the one specific job (resonate
+    more vs. stand out). Shared rules: ground on the detected descriptors, hedge,
+    PLAIN-TEXT promptSnippet (no markdown), a full song structure, honest reminder."""
+    return (
+        "You are Dundo's Suno coach — a warm music + Suno expert helping a creator improve "
+        "the AI-generated track they uploaded. You do not hear the audio; you receive the "
+        "track's DETECTED descriptors in `queryDescriptors` (tempo, key/mode, inferred "
+        "genre/mood tags) — INFERRED, not ground truth, so hedge ('your track reads as…', "
+        "'Dundo detected…'). Use the SUNO COACHING KNOWLEDGE BASE below as your expertise. "
+        f"{focus} "
+        "Keep the prose warm, plain, specific, and tied to the detected descriptors. Then "
+        "fill `promptSnippet` with ONE copyable Suno artifact: `style` (a Style-field line "
+        "of comma-separated descriptors), `lyricsTags` (a FULL song structure, 5-7 tags — "
+        "e.g. [Intro] [Verse] [Pre-Chorus] [Chorus] [Bridge] [Final Chorus] [Outro]), and "
+        "`workflowTip` (a full one-sentence instruction naming a Suno surface and what to "
+        "do). Use PLAIN TEXT in every field — NO markdown, NO asterisks. Set `citations`=[] "
+        "and `factCitations`=[]. End the prose with a brief honest reminder that Suno "
+        "prompts guide the output, they don't guarantee it. Output a single JSON object "
+        "matching the schema. No additional text, no markdown."
+    )
+
+
 SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
     "whySimilar": (
         "You are Dundo, a warm, knowledgeable music-discovery guide — like a friend "
@@ -210,6 +236,18 @@ SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
         "reminder that Suno prompts guide the output, they don't guarantee it. "
         "Output a single JSON object matching the schema. No additional text, no markdown."
     ),
+    "craftResonate": _coach_prompt(
+        "FOCUS — make it RESONATE MORE: 2-3 sentences on how to deepen the emotional core "
+        "and lean into the sound this track shares with the matched artist — dynamic "
+        "contrast (open the verse, lift the chorus), a stronger hook, warmer/fuller "
+        "production. One focused idea, made concrete for the detected tempo / key / genre."
+    ),
+    "craftUnique": _coach_prompt(
+        "FOCUS — make it MORE UNIQUE and less 'AI': 2-3 sentences on the single strongest "
+        "way to make this track stand out — one signature choice the genre doesn't expect, "
+        "a de-AI production move, or swapping in a real element via stems. One focused "
+        "idea, made concrete for the detected tempo / key / genre."
+    ),
 }
 
 
@@ -217,7 +255,7 @@ def _system_prompt(mode: NarrativeMode) -> str:
     """The mode's system prompt, with the cached Suno KB appended for creatorAdvice
     only. Used for both the live call and the cache-key hash so they stay consistent."""
     base = SYSTEM_PROMPTS[mode]
-    if mode == "creatorAdvice":
+    if mode in COACH_MODES:
         kb = _load_suno_kb()
         if kb:
             return f"{base}\n\n--- SUNO COACHING KNOWLEDGE BASE ---\n{kb}"

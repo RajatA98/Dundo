@@ -929,7 +929,7 @@ async def narrative_endpoint(req: NarrativeRequest):
             tel.set(error_code="narrative-disabled")
             return _err(503, "narrative-disabled")
         # Gate 3: mode is one of the supported values.
-        if req.mode not in ("whySimilar", "creatorAdvice"):
+        if req.mode not in ("whySimilar", "creatorAdvice", "craftResonate", "craftUnique"):
             tel.set(error_code="unsupported-mode")
             return _err(422, "unsupported-mode")
 

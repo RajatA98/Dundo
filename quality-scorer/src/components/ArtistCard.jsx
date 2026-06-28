@@ -10,14 +10,18 @@ const LABEL_DISPLAY = {
 }
 const formatLabel = (s) => LABEL_DISPLAY[s] || s
 
+// Strip stray markdown (the LLM sometimes copies **bold** from the KB into a field).
+const noMd = (s) => String(s || '').replace(/\*\*/g, '').replace(/`/g, '').trim()
 // Suno coach output — a copyable Style line + Lyrics-box metatags + a workflow tip.
 function PromptSnippet({ snippet }) {
   const [copied, setCopied] = useState(false)
-  const tags = (snippet.lyricsTags || []).join(' ')
+  const style = noMd(snippet.style)
+  const tags = (snippet.lyricsTags || []).map(noMd).filter(Boolean).join(' ')
+  const workflowTip = noMd(snippet.workflowTip)
   const copyText = [
-    snippet.style && `Style: ${snippet.style}`,
+    style && `Style: ${style}`,
     tags && `Lyrics: ${tags}`,
-    snippet.workflowTip && `Workflow: ${snippet.workflowTip}`,
+    workflowTip && `Workflow: ${workflowTip}`,
   ].filter(Boolean).join('\n')
   const copy = () => {
     navigator.clipboard?.writeText(copyText).then(
@@ -42,10 +46,10 @@ function PromptSnippet({ snippet }) {
           {copied ? 'Copied ✓' : 'Copy'}
         </button>
       </div>
-      {snippet.style && <div style={{ marginBottom: 10 }}>{label('Style field')}{code(snippet.style)}</div>}
-      {tags && <div style={{ marginBottom: snippet.workflowTip ? 10 : 0 }}>{label('Lyrics box')}{code(tags)}</div>}
-      {snippet.workflowTip && (
-        <div>{label('Workflow')}<div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--color-ink-soft)' }}>{snippet.workflowTip}</div></div>
+      {style && <div style={{ marginBottom: 10 }}>{label('Style field')}{code(style)}</div>}
+      {tags && <div style={{ marginBottom: workflowTip ? 10 : 0 }}>{label('Lyrics box')}{code(tags)}</div>}
+      {workflowTip && (
+        <div>{label('Workflow')}<div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--color-ink-soft)' }}>{workflowTip}</div></div>
       )}
     </div>
   )
@@ -73,11 +77,15 @@ function fallbackNarrative(artist, mode = 'whySimilar') {
   const city = cityOf(artist?.location)
   const place = city ? `, out of ${city},` : ''
   const sound = humanList(shared.slice(0, 3))
-  if (mode === 'creatorAdvice') {
-    if (shared.length) {
-      return `You and ${who} both live in ${sound}. To stand apart, push a contrast they don't — shift the rhythm or arrangement in your strongest section, and lean into one signature texture that's yours alone.`
-    }
-    return `Your track and ${who}'s share a close sonic character. To make yours more distinctive, vary the arrangement where they resemble each other most, and lean into a motif that's yours alone.`
+  if (mode === 'craftResonate') {
+    return shared.length
+      ? `Lean deeper into the ${sound} you share with ${who}: open the verse softer and let the chorus lift, and push the hook a little harder so it really lands.`
+      : `Lean into the sonic character you share with ${who} — open the verse, let the chorus lift, and let one melodic hook carry the emotion.`
+  }
+  if (mode === 'craftUnique' || mode === 'creatorAdvice') {
+    return shared.length
+      ? `You and ${who} both live in ${sound}. To stand apart, push a contrast they don't — shift the rhythm or arrangement in your strongest section, and foreground one signature texture that's yours alone.`
+      : `Your track and ${who}'s share a close sonic character. To stand out, vary the arrangement where they resemble each other most, and lean into a motif that's yours alone.`
   }
   if (shared.length) {
     return `${who}${place} works the same ${sound} territory your track does — that shared sonic ground is what brought them up as a match. Press play and see if it clicks.`
@@ -100,10 +108,14 @@ const MAX_CHIPS = 4
 export default function ArtistCard({ artist, contextToken = null, defaultExpanded = false }) {
   const [playing, setPlaying] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded)
-  const [mode, setMode] = useState('whySimilar')
+  // Top tab: 'whySimilar' (the discovery explanation) or 'craft' (the Suno coach).
+  // Under craft, two focused sub-options that each generate a distinct coached answer.
+  const [tab, setTab] = useState('whySimilar')
+  const [craftMode, setCraftMode] = useState('craftResonate') // 'craftResonate' | 'craftUnique'
+  const mode = tab === 'whySimilar' ? 'whySimilar' : craftMode
   // One narrative per mode, cached as { prose, snippet }. whySimilar loads on mount
-  // (drives the toggle's visibility); creatorAdvice (the Suno coach) loads lazily when
-  // the user opens that tab and carries a structured, copyable promptSnippet.
+  // (drives the toggle's visibility); each coach mode loads lazily on selection and
+  // carries its own structured, copyable promptSnippet.
   const [narratives, setNarratives] = useState(() =>
     artist.narrative ? { whySimilar: { prose: artist.narrative, snippet: null } } : {},
   )
@@ -276,15 +288,15 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
               <div role="tablist" style={{ display: 'flex', gap: 6 }}>
                 {[
                   ['whySimilar', 'Why it resonates'],
-                  ['creatorAdvice', 'For your craft'],
-                ].map(([m, label]) => {
-                  const active = mode === m
+                  ['craft', 'For your craft'],
+                ].map(([t, label]) => {
+                  const active = tab === t
                   return (
                     <button
-                      key={m}
+                      key={t}
                       role="tab"
                       aria-selected={active}
-                      onClick={() => setMode(m)}
+                      onClick={() => setTab(t)}
                       style={{
                         cursor: 'pointer',
                         font: 'inherit',
@@ -303,10 +315,40 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
                   )
                 })}
               </div>
+              {tab === 'craft' && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  {[
+                    ['craftResonate', 'Resonate more'],
+                    ['craftUnique', 'Become more unique'],
+                  ].map(([cm, label]) => {
+                    const active = craftMode === cm
+                    return (
+                      <button
+                        key={cm}
+                        onClick={() => setCraftMode(cm)}
+                        style={{
+                          cursor: 'pointer',
+                          font: 'inherit',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          padding: '4px 11px',
+                          borderRadius: 999,
+                          border: `1px solid ${active ? 'var(--color-teal)' : 'var(--color-line)'}`,
+                          background: active ? 'var(--color-teal-soft)' : 'transparent',
+                          color: active ? 'var(--color-teal-deep)' : 'var(--color-faint)',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 17, lineHeight: 1.62, color: 'var(--color-ink-soft)', margin: '12px 0 0', maxWidth: '64ch' }}>
                 {narrative || 'Reading the match…'}
               </p>
-              {mode === 'creatorAdvice' && snippet && (snippet.style || (snippet.lyricsTags || []).length > 0) && (
+              {tab === 'craft' && snippet && (snippet.style || (snippet.lyricsTags || []).length > 0) && (
                 <PromptSnippet snippet={snippet} />
               )}
             </div>
