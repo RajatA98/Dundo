@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 
 # Bump this (and coordinate frontend + narrative schema) on any breaking shape change.
 # v2: adds optional ArtistMatch.evidenceTags (Evidence Layer, mtg-knn-v1).
-CONTRACT_VERSION = "artist-v3"  # v3: adds querySummary ("Your song's stats") to the response
+CONTRACT_VERSION = "artist-v4"  # v4: adds matchWindow (segment resonance moment) to each match
 
 SupportKind = Literal[
     "jamendo", "fma", "bandcamp", "patreon", "website", "spotify", "other"
@@ -119,6 +119,12 @@ class ArtistMatch(BaseModel):
         None,
         description="Genre/mood/instrument overlap evidence (Evidence Layer, mtg-knn-v1). Absent when "
         "no descriptor clears the confidence gate; never asserts a weak/contradictory overlap.",
+    )
+    matchWindow: Optional[dict] = Field(
+        None,
+        description="The strongest segment match: {queryStartSec,queryEndSec,catalogStartSec,"
+        "catalogEndSec,windowSeconds} — which 10s of the upload lines up with which 10s of the "
+        "artist's track. Lets the UI play just those moments.",
     )
     # NOTE: these are NOT produced by the enrichment providers (enrich_spike.py) — they come
     # from the existing mir_features / rag_narrative machinery when the endpoint is wired (Phase 3).

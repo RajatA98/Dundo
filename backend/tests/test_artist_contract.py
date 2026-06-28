@@ -26,8 +26,8 @@ def _track(tid, artist, source="jamendo", view_url=None, source_url=None):
 
 def test_contract_version_is_frozen_marker():
     # If this changes, the frontend (Phase 5) + narrative schema (Phase 4) must coordinate.
-    assert CONTRACT_VERSION == "artist-v3"
-    assert ArtistNeighborsResponse(matches=[]).contractVersion == "artist-v3"
+    assert CONTRACT_VERSION == "artist-v4"
+    assert ArtistNeighborsResponse(matches=[]).contractVersion == "artist-v4"
 
 
 def test_context_token_is_optional():
@@ -101,5 +101,5 @@ def test_representative_track_id_serializes_without_version_bump():
         representativeTrackId="jamendo:track:1",
     )
     data = ArtistNeighborsResponse(matches=[m]).model_dump()
-    assert data["contractVersion"] == "artist-v3"
+    assert data["contractVersion"] == "artist-v4"
     assert data["matches"][0]["representativeTrackId"] == "jamendo:track:1"

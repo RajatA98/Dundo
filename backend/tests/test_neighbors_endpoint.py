@@ -377,7 +377,7 @@ def test_neighbors_artist_response_dedupes_and_attaches_representative_track(mon
     data = _call_neighbors(api, k=3)
 
     assert calls["k"] == 40  # widened for the evidence-tag voting pool (25 + buffer)
-    assert data["contractVersion"] == "artist-v3"
+    assert data["contractVersion"] == "artist-v4"
     assert "neighbors" not in data
     assert [m["artistId"] for m in data["matches"]] == ["jamendo:maya-lev", "jamendo:hollow-coast"]
     assert data["matches"][0]["representativeTrackId"] == "t1"
@@ -480,7 +480,7 @@ def test_neighbors_no_corpus_returns_empty_artist_response(monkeypatch):
 
     data = _call_neighbors(api)
 
-    assert data == {"contractVersion": "artist-v3", "matches": [], "contextToken": None, "querySummary": None}
+    assert data == {"contractVersion": "artist-v4", "matches": [], "contextToken": None, "querySummary": None}
 
 
 # ----------------------------------------------------------------------------

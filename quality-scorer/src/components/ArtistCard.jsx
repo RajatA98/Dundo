@@ -10,6 +10,45 @@ const LABEL_DISPLAY = {
 }
 const formatLabel = (s) => LABEL_DISPLAY[s] || s
 
+const fmtTs = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
+
+// Plays just one window of an audio file (seek → play → auto-stop at the window end).
+// Used to let the listener hear the exact moment where two tracks resonate.
+function SnippetPlayer({ url, start, end, label }) {
+  const ref = useRef(null)
+  const [playing, setPlaying] = useState(false)
+  const toggle = () => {
+    const el = ref.current
+    if (!el || !url) return
+    if (playing) {
+      el.pause()
+      setPlaying(false)
+      return
+    }
+    el.currentTime = start
+    el.play().then(() => setPlaying(true)).catch(() => setPlaying(false))
+  }
+  const onTime = () => {
+    const el = ref.current
+    if (el && el.currentTime >= end) {
+      el.pause()
+      el.currentTime = start
+      setPlaying(false)
+    }
+  }
+  return (
+    <button
+      onClick={toggle}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', font: 'inherit', fontSize: 12.5, fontWeight: 600, padding: '7px 13px', borderRadius: 999, border: `1px solid ${playing ? 'var(--color-teal)' : 'var(--color-line)'}`, background: playing ? 'var(--color-teal-soft)' : 'var(--color-paper)', color: 'var(--color-ink-soft)' }}
+    >
+      <audio ref={ref} src={url} onTimeUpdate={onTime} onEnded={() => setPlaying(false)} preload="none" />
+      <span style={{ color: 'var(--color-teal-deep)' }}>{playing ? '❙❙' : '▶'}</span>
+      {label}
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-faint)' }}>{fmtTs(start)}–{fmtTs(end)}</span>
+    </button>
+  )
+}
+
 // Strip stray markdown (the LLM sometimes copies **bold** from the KB into a field).
 const noMd = (s) => String(s || '').replace(/\*\*/g, '').replace(/`/g, '').trim()
 // Suno coach output — a copyable Style line + Lyrics-box metatags + a workflow tip.
@@ -105,7 +144,7 @@ const MAX_CHIPS = 4
  *
  * @param {{ artist: object, defaultExpanded?: boolean }} props
  */
-export default function ArtistCard({ artist, contextToken = null, defaultExpanded = false }) {
+export default function ArtistCard({ artist, contextToken = null, queryUrl = null, defaultExpanded = false }) {
   const [playing, setPlaying] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded)
   // Top tab: 'whySimilar' (the discovery explanation) or 'craft' (the Suno coach).
@@ -268,6 +307,24 @@ export default function ArtistCard({ artist, contextToken = null, defaultExpande
         </div>
         <span style={{ flex: 'none', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--color-muted)' }}>{artist.duration || ''}</span>
       </div>
+
+      {/* Where it resonates most — the strongest segment match. Play just those two
+          windows to hear the exact moment the upload and the artist line up. */}
+      {artist.matchWindow && (queryUrl || artist.previewUrl) && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 10 }}>
+            Where it resonates most
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {queryUrl && (
+              <SnippetPlayer url={queryUrl} start={artist.matchWindow.queryStartSec} end={artist.matchWindow.queryEndSec} label="Your track" />
+            )}
+            {artist.previewUrl && (
+              <SnippetPlayer url={artist.previewUrl} start={artist.matchWindow.catalogStartSec} end={artist.matchWindow.catalogEndSec} label={artist.name} />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* match explanation — collapsible; hydrates lazily from /narrative. Two modes:
           "Why it resonates" (whySimilar) and "For your craft" (creatorAdvice). Every

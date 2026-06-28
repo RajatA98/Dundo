@@ -57,7 +57,7 @@ export default function ScorerPage() {
       {phase === 'analyzing' && <Analyzing />}
       {phase === 'error' && <ErrorNote msg={error} />}
       {(phase === 'results' || phase === 'empty') && queryUrl && <YourTrack url={queryUrl} stats={querySummary} />}
-      {phase === 'results' && <ArtistResults artists={matches} contextToken={contextToken} />}
+      {phase === 'results' && <ArtistResults artists={matches} contextToken={contextToken} queryUrl={queryUrl} />}
       {phase === 'empty' && <EmptyState />}
     </>
   )

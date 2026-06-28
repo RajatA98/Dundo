@@ -825,6 +825,9 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
         # The human display name ("Marc Teichert"), so the narrative names the artist
         # rather than the raw MTG slug ("artist_355362") carried on the track.
         nb["artistName"] = match.name
+        # The strongest segment match — which 10s of the upload lines up with which 10s of
+        # the artist's track. Lets the card play just those resonance moments.
+        match.matchWindow = nb.get("matchTimestamp")
         matches.append(match)
         winning_neighbors.append(nb)
 
