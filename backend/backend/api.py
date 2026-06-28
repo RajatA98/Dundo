@@ -626,7 +626,7 @@ def _issue_context_token_for_neighbors(
         neighbor_fragments[str(nb["trackId"])] = context_token.neighbor_context_fragment(
             track_id=str(nb["trackId"]),
             title=str(track.get("title") or nb["trackId"]),
-            artist=track.get("artist"),
+            artist=nb.get("artistName") or track.get("artist"),
             query_window=(
                 float(ts.get("queryStartSec", 0.0)),
                 float(ts.get("queryEndSec", 0.0)),
@@ -822,6 +822,9 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
         # Narrative v2: the matched artist's own catalog facts (location + tags), for the
         # context token. Distinct from evidenceShared (the overlap); validated in /narrative.
         nb["artistKnowledge"] = _artist_knowledge_for(winning_track_id, match)
+        # The human display name ("Marc Teichert"), so the narrative names the artist
+        # rather than the raw MTG slug ("artist_355362") carried on the track.
+        nb["artistName"] = match.name
         matches.append(match)
         winning_neighbors.append(nb)
 

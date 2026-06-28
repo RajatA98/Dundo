@@ -126,7 +126,12 @@ export async function neighborsUpload(file, k = 5) {
       await new Promise((res) => setTimeout(res, 600 * attempt))
     }
   }
-  throw lastErr || new Error('neighbors request failed')
+  // Retries exhausted on a timeout / network drop / 5xx (e.g. the server is waking
+  // up or briefly redeploying). Surface a warm, actionable message, not "Fetch is
+  // aborted" / "HTTP 503".
+  throw new Error(
+    "The server is taking longer than usual — it may be waking up. Give it a few seconds and try again.",
+  )
 }
 
 /**
