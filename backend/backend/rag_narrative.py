@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, ValidationError
 NarrativeMode = Literal["whySimilar", "creatorAdvice"]
 CriterionId = Literal["tempo", "key", "harmonic", "timbre"]
 
-RESPONSE_SCHEMA_VERSION = "v1"
+RESPONSE_SCHEMA_VERSION = "v2"  # v2: artistKnowledge grounding + typed factCitations
 CRITERIA_ALGORITHM_VERSION = "adr-0004-v1"
 MAX_PROMPT_CHARS = 8000
 MAX_COMPLETION_TOKENS = 1000
@@ -48,6 +48,15 @@ class NarrativeContext(BaseModel):
     # Evidence Layer: gated shared descriptors [{kind,label,confidence}] — grounds the
     # narrative on genre/mood/instrument overlap even when MIR criteria are absent.
     evidenceShared: list[dict] = Field(default_factory=list)
+    # Narrative v2 — catalog facts about the MATCHED artist (NOT the overlap):
+    #   {location, locationAliases:[...], genres:[...], moods:[...], instruments:[...],
+    #    similarArtists:[...]}
+    # Lets the narrative add brief real context about who the artist is. Any
+    # place/scene/era/history claim the LLM makes must be backed by a factCitation
+    # validated against this object — otherwise the narrative is rejected. Empty {}
+    # means "no catalog facts": the narrative stays acoustic/evidence-only and may
+    # make NO artist-context claims.
+    artistKnowledge: dict = Field(default_factory=dict)
 
 
 class CitedValue(BaseModel):
@@ -69,11 +78,26 @@ class StructuredCitation(BaseModel):
     citedValues: list[CitedValue]
 
 
+FactType = Literal["location", "tag", "similarArtist"]
+
+
+class FactCitation(BaseModel):
+    # A typed artist-fact the narrative asserts. `value` must be present in the
+    # supplied artistKnowledge (location alias / tag / similar artist) or the
+    # narrative is rejected as `fact-hallucinated`. Mirrors the numeric-citation
+    # integrity model, extended from numbers to facts.
+    type: FactType
+    value: str
+
+
 class NarrativeResponse(BaseModel):
     kind: Literal["narrative"] = "narrative"
     mode: NarrativeMode
     prose: str
     citations: list[StructuredCitation]
+    # Optional in Pydantic (older mocks omit it) but the strict OpenAI schema marks
+    # it required, so live calls always return it (possibly empty).
+    factCitations: list[FactCitation] = Field(default_factory=list)
 
 
 class LowConfidence(BaseModel):
@@ -92,6 +116,20 @@ class NarrativeUnavailable(BaseModel):
 NarrativeResult = Union[NarrativeResponse, LowConfidence, NarrativeUnavailable]
 
 
+# Narrative v2 — shared rule appended to both modes. Grounds artist-context claims
+# in the supplied catalog facts and forces a typed citation for each, so place/scene/
+# era claims can be validated and invented ones rejected.
+_ARTIST_KNOWLEDGE_RULE = (
+    "You also receive `artistKnowledge`: catalog facts about the matched artist — their "
+    "location and their own genre/mood/instrument tags (and sometimes similar artists). "
+    "You MAY add ONE brief, real touch of context from it (e.g. where they are based, or "
+    "what their catalog leans toward), used sparingly — never a tag dump. You MUST NOT "
+    "state any location, scene, era, or history that is not present in `artistKnowledge`; "
+    "when it is empty, make no such claim. For EVERY artist fact you use, add a "
+    "`factCitations` entry with its `type` (location | tag | similarArtist) and the exact "
+    "`value` drawn from `artistKnowledge`."
+)
+
 SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
     "whySimilar": (
         "You are Dundo, a warm music-discovery assistant explaining why this "
@@ -104,7 +142,9 @@ SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
         "reference only descriptors listed in `sharedDescriptors` — never invent "
         "a genre, mood, or instrument. When neither criteria nor shared descriptors are "
         "present, ground the explanation in the overall acoustic resemblance and the matched "
-        "section — describe the shared sonic character honestly, without naming a genre. Output a single JSON object matching the "
+        "section — describe the shared sonic character honestly, without naming a genre. "
+        + _ARTIST_KNOWLEDGE_RULE
+        + " Output a single JSON object matching the "
         "schema. No additional text, no markdown."
     ),
     "creatorAdvice": (
@@ -120,8 +160,9 @@ SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
         "neither criteria nor shared descriptors are present, ground the "
         "suggestions in the overall acoustic resemblance and the matched section — "
         "speak to the shared sonic character honestly, without naming a genre, and "
-        "do not cite criteria that aren't present (return empty citations). Output "
-        "a single JSON object matching the schema. No additional text, no markdown."
+        "do not cite criteria that aren't present (return empty citations). "
+        + _ARTIST_KNOWLEDGE_RULE
+        + " Output a single JSON object matching the schema. No additional text, no markdown."
     ),
 }
 
@@ -144,10 +185,13 @@ Return JSON with exactly this shape:
         {{"name": "rawCosine", "value": 0.0}}
       ]
     }}
+  ],
+  "factCitations": [
+    {{"type": "location|tag|similarArtist", "value": "exact value drawn from artistKnowledge"}}
   ]
 }}
 
-Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made. For creatorAdvice, write three concrete suggestion-style clauses in prose, each tied to the supplied evidence — a cited criterion when criteria are present, otherwise a shared descriptor or the overall acoustic resemblance (with empty citations).
+`citations` carry numeric/criterion evidence; `factCitations` carry artist facts (one per artist fact you state in prose). Use [] for either when you cite nothing of that kind. Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made. For creatorAdvice, write three concrete suggestion-style clauses in prose, each tied to the supplied evidence — a cited criterion when criteria are present, otherwise a shared descriptor or the overall acoustic resemblance (with empty citations).
 
 Context:
 {context_json}
@@ -178,6 +222,8 @@ def cache_key(
         "evidence_shared": sorted(
             (str(d.get("kind")), str(d.get("label"))) for d in context.evidenceShared
         ),
+        # artistKnowledge is prompt-relevant context, so it must affect the cache key.
+        "artist_knowledge": _round_numbers(context.artistKnowledge),
         "raw_cosine": round(float(context.rawCosine), 3),
     }
     return _sha256_json(payload)
@@ -253,6 +299,13 @@ def generate_narrative(
     if not _citations_are_grounded(narrative.citations, context):
         return finish(
             NarrativeUnavailable(reason="citation-hallucinated"),
+            gate_result="called",
+            success=False,
+        )
+
+    if not _fact_citations_are_grounded(narrative.factCitations, context):
+        return finish(
+            NarrativeUnavailable(reason="fact-hallucinated"),
             gate_result="called",
             success=False,
         )
@@ -334,6 +387,7 @@ def _build_user_prompt(context: NarrativeContext, mode: NarrativeMode) -> str:
         "rawCosine": round(float(context.rawCosine), 3),
         "criteria": [_criterion_for_prompt(c) for c in sorted(context.criteria, key=lambda c: c.id)],
         "sharedDescriptors": context.evidenceShared,
+        "artistKnowledge": context.artistKnowledge,
         "acrcloudCoverSongId": context.acrcloudCoverSongId,
     }
     return USER_PROMPT_TEMPLATE.format(
@@ -410,6 +464,47 @@ def _citations_are_grounded(citations: list[StructuredCitation], context: Narrat
                     return False
             else:
                 return False
+    return True
+
+
+def _fact_citations_are_grounded(
+    fact_citations: list[FactCitation], context: NarrativeContext
+) -> bool:
+    """Every asserted artist fact must be backed by the supplied artistKnowledge.
+
+    The integrity model the numeric citations use, extended to facts: a location
+    claim must match a canonical alias; a tag claim must be one of the artist's
+    real catalog tags; a similarArtist claim must be in the supplied list. Any
+    unsupported fact (or a fact at all when artistKnowledge is empty) → reject.
+    Empty factCitations is always fine (the narrative made no artist-fact claim).
+    """
+    if not fact_citations:
+        return True
+    ak = context.artistKnowledge or {}
+    loc_aliases = {str(a).strip().lower() for a in (ak.get("locationAliases") or []) if str(a).strip()}
+    tags = {
+        str(t).strip().lower()
+        for key in ("genres", "moods", "instruments")
+        for t in (ak.get(key) or [])
+        if str(t).strip()
+    }
+    similar = {str(s).strip().lower() for s in (ak.get("similarArtists") or []) if str(s).strip()}
+    for fc in fact_citations:
+        value = str(fc.value).strip().lower()
+        if not value:
+            return False
+        if fc.type == "location":
+            # match if the cited value equals/contains/is-contained-by a known alias
+            if not any(value == a or value in a or a in value for a in loc_aliases):
+                return False
+        elif fc.type == "tag":
+            if value not in tags:
+                return False
+        elif fc.type == "similarArtist":
+            if value not in similar:
+                return False
+        else:
+            return False
     return True
 
 

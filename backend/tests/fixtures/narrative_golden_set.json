@@ -134,6 +134,56 @@
       "expected_reason": null
     },
     {
+      "name": "hallucinated_artist_fact",
+      "category": "hallucinated_citation",
+      "description": "Narrative v2: LLM asserts a location NOT in artistKnowledge → rejected as fact-hallucinated (the integrity gate extended from numbers to artist facts).",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "trackId": "tier2:jamendo:635300",
+        "title": "Drift",
+        "artist": "Marco",
+        "queryWindow": [
+          5.0,
+          15.0
+        ],
+        "matchWindow": [
+          5.0,
+          15.0
+        ],
+        "rawCosine": 0.82,
+        "criteria": [],
+        "artistKnowledge": {
+          "location": "Utrecht, Netherlands",
+          "locationAliases": [
+            "utrecht, netherlands",
+            "utrecht",
+            "netherlands",
+            "nld",
+            "dutch"
+          ],
+          "genres": [
+            "dream pop"
+          ]
+        },
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "This Tokyo-based artist shares your hazy, atmospheric sound.",
+        "citations": [],
+        "factCitations": [
+          {
+            "type": "location",
+            "value": "Tokyo"
+          }
+        ]
+      },
+      "expected_kind": "unavailable",
+      "expected_reason": "fact-hallucinated"
+    },
+    {
       "name": "happy_path_creatoradvice",
       "category": "happy_path",
       "description": "Same context, different mode \u2192 creator advice narrative.",

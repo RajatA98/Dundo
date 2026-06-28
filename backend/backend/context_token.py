@@ -180,6 +180,7 @@ def neighbor_context_fragment(
     raw_cosine: float,
     criteria: list[dict[str, Any]] | None,
     evidence_shared: list[dict[str, Any]] | None = None,
+    artist_knowledge: dict[str, Any] | None = None,
 ) -> dict:
     """Build the per-neighbor dict the token embeds. Matches the
     NarrativeContext shape Codex's rag_narrative module expects, minus the
@@ -195,4 +196,8 @@ def neighbor_context_fragment(
         # Evidence Layer: the gated shared descriptors (genre/instrument/mood) for grounding
         # the narrative even when MIR criteria are absent.
         "evidenceShared": evidence_shared if evidence_shared is not None else [],
+        # Narrative v2: catalog facts about the MATCHED artist (location + their own
+        # genre/mood/instrument tags + canonical aliases) — lets the narrative add real
+        # context, validated against this object so place/scene claims can't be invented.
+        "artistKnowledge": artist_knowledge if artist_knowledge is not None else {},
     }

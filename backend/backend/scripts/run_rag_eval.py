@@ -63,6 +63,8 @@ def _build_context(spec: dict):
         criteria=[
             rag_narrative.CriterionContext(**c) for c in spec["criteria"]
         ],
+        evidenceShared=spec.get("evidenceShared") or [],
+        artistKnowledge=spec.get("artistKnowledge") or {},
         acrcloudCoverSongId=spec.get("acrcloudCoverSongId"),
     )
 

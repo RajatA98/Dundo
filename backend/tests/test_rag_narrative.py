@@ -141,7 +141,7 @@ def test_openai_call_uses_strict_json_schema_and_larger_token_budget() -> None:
     schema_payload = kwargs["response_format"]["json_schema"]
     assert schema_payload["strict"] is True
     assert schema_payload["schema"]["additionalProperties"] is False
-    assert set(schema_payload["schema"]["required"]) == {"kind", "mode", "prose", "citations"}
+    assert set(schema_payload["schema"]["required"]) == {"kind", "mode", "prose", "citations", "factCitations"}
     # citedValues is now a list of fixed-shape {name,value} objects (not an open
     # dict) so the schema is OpenAI-strict-valid. See test_strict_schema.py.
     cited_values_schema = schema_payload["schema"]["$defs"]["StructuredCitation"]["properties"]["citedValues"]
@@ -340,6 +340,94 @@ def test_creator_advice_acoustic_only_passes_with_empty_citations() -> None:
         )
     assert isinstance(result, NarrativeResponse)
     assert result.mode == "creatorAdvice"
+    call.assert_called_once()
+
+
+def _ak() -> dict:
+    return {
+        "location": "Utrecht, Netherlands",
+        "locationAliases": ["utrecht, netherlands", "utrecht", "netherlands", "nld", "dutch"],
+        "genres": ["dream pop", "ambient"],
+        "moods": ["dreamy"],
+        "instruments": ["guitar"],
+    }
+
+
+def test_grounded_artist_facts_pass() -> None:
+    # facts that ARE in artistKnowledge → narrative passes.
+    ctx = _context(criteria=[])
+    ctx.artistKnowledge = _ak()
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Maya, a Utrecht-based artist whose catalog leans dream pop, shares your hazy atmosphere.",
+        "citations": [],
+        "factCitations": [
+            {"type": "location", "value": "Utrecht"},
+            {"type": "tag", "value": "dream pop"},
+        ],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="m", catalog_sha="c",
+        )
+    assert isinstance(result, NarrativeResponse)
+    call.assert_called_once()
+
+
+def test_hallucinated_location_fact_rejected() -> None:
+    # LLM claims a place NOT in artistKnowledge → reject (the integrity gate for facts).
+    ctx = _context(criteria=[])
+    ctx.artistKnowledge = _ak()
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "This Tokyo-based artist shares your sound.",
+        "citations": [],
+        "factCitations": [{"type": "location", "value": "Tokyo"}],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload):
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="m", catalog_sha="c",
+        )
+    assert isinstance(result, NarrativeUnavailable)
+    assert result.reason == "fact-hallucinated"
+
+
+def test_artist_fact_claimed_with_no_knowledge_rejected() -> None:
+    # artistKnowledge empty but the LLM still asserts a fact → reject (can't invent).
+    ctx = _context(criteria=[])  # artistKnowledge defaults to {}
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "This French artist resonates with you.",
+        "citations": [],
+        "factCitations": [{"type": "location", "value": "France"}],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload):
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="m", catalog_sha="c",
+        )
+    assert isinstance(result, NarrativeUnavailable)
+    assert result.reason == "fact-hallucinated"
+
+
+def test_empty_fact_citations_always_ok() -> None:
+    # No artist-fact claim (the common acoustic/evidence-only case) → unaffected.
+    ctx = _context(criteria=[])
+    ctx.artistKnowledge = _ak()
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Your tracks share a similar acoustic character in the matched section.",
+        "citations": [],
+        "factCitations": [],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="m", catalog_sha="c",
+        )
+    assert isinstance(result, NarrativeResponse)
     call.assert_called_once()
 
 

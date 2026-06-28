@@ -494,6 +494,73 @@ def _track_preview_url(track: dict) -> str | None:
     )
 
 
+# ISO3 → (country name, demonym) for the common CC/indie countries, so location
+# facts validate whether the LLM writes "AUS", "Australia", or "Australian".
+# Unknown codes degrade gracefully (alias set is just city + code).
+_ISO3_COUNTRY = {
+    "USA": ("United States", "American"), "GBR": ("United Kingdom", "British"),
+    "DEU": ("Germany", "German"), "FRA": ("France", "French"), "ITA": ("Italy", "Italian"),
+    "ESP": ("Spain", "Spanish"), "NLD": ("Netherlands", "Dutch"), "BEL": ("Belgium", "Belgian"),
+    "SWE": ("Sweden", "Swedish"), "NOR": ("Norway", "Norwegian"), "FIN": ("Finland", "Finnish"),
+    "DNK": ("Denmark", "Danish"), "POL": ("Poland", "Polish"), "CZE": ("Czechia", "Czech"),
+    "AUT": ("Austria", "Austrian"), "CHE": ("Switzerland", "Swiss"), "PRT": ("Portugal", "Portuguese"),
+    "IRL": ("Ireland", "Irish"), "AUS": ("Australia", "Australian"), "NZL": ("New Zealand", "New Zealander"),
+    "CAN": ("Canada", "Canadian"), "BRA": ("Brazil", "Brazilian"), "ARG": ("Argentina", "Argentine"),
+    "MEX": ("Mexico", "Mexican"), "JPN": ("Japan", "Japanese"), "RUS": ("Russia", "Russian"),
+    "UKR": ("Ukraine", "Ukrainian"), "GRC": ("Greece", "Greek"), "ROU": ("Romania", "Romanian"),
+    "HUN": ("Hungary", "Hungarian"), "R4S": ("Serbia", "Serbian"), "HRV": ("Croatia", "Croatian"),
+    "TUR": ("Turkey", "Turkish"), "ISR": ("Israel", "Israeli"), "IND": ("India", "Indian"),
+    "CHL": ("Chile", "Chilean"), "COL": ("Colombia", "Colombian"), "ZAF": ("South Africa", "South African"),
+    "SVN": ("Slovenia", "Slovenian"), "SVK": ("Slovakia", "Slovak"), "EST": ("Estonia", "Estonian"),
+    "NCL": ("New Caledonia", "New Caledonian"),
+}
+
+
+def _artist_knowledge_for(track_id: str, match) -> dict:
+    """Build the matched artist's catalog-fact object (Narrative v2).
+
+    Real facts we already hold: the artist's location (with canonical aliases so a
+    location fact validates regardless of spelling) and their own MTG genre/mood/
+    instrument tags (support-filtered, capped — used sparingly, never a tag dump).
+    Empty dict when we know nothing → the narrative stays acoustic/evidence-only.
+    """
+    tags = _catalog_tags.get(track_id) or {}
+    genres = list(tags.get("coarseGenre") or [])[:4]
+    moods = list(tags.get("mood") or [])[:4]
+    instruments = list(tags.get("instrument") or [])[:4]
+
+    location_raw = (getattr(match, "location", None) or "").strip()
+    display_location = location_raw
+    aliases: set[str] = set()
+    if location_raw:
+        parts = [p.strip() for p in location_raw.split(",") if p.strip()]
+        aliases.add(location_raw.lower())
+        for p in parts:
+            aliases.add(p.lower())
+        # last part is often an ISO3 country code → expand to name + demonym
+        if parts:
+            code = parts[-1].upper()
+            named = _ISO3_COUNTRY.get(code)
+            if named:
+                name, demonym = named
+                aliases.update({name.lower(), demonym.lower()})
+                city = parts[0] if len(parts) > 1 else None
+                display_location = f"{city}, {name}" if city else name
+
+    ak: dict = {}
+    if display_location:
+        ak["location"] = display_location
+        ak["locationAliases"] = sorted(a for a in aliases if a)
+    if genres:
+        ak["genres"] = genres
+    if moods:
+        ak["moods"] = moods
+    if instruments:
+        ak["instruments"] = instruments
+    # similarArtists left empty for v1 (build-time graph is the Codex-approved fast-follow).
+    return ak
+
+
 def _issue_context_token_for_neighbors(query_fingerprint: str, neighbors: list[dict]) -> str | None:
     if not neighbors or not context_token.is_configured():
         return None
@@ -516,6 +583,7 @@ def _issue_context_token_for_neighbors(query_fingerprint: str, neighbors: list[d
             raw_cosine=float(nb.get("rawCosine", 0.0)),
             criteria=_criteria_to_token_fragment(nb.get("criteria")),
             evidence_shared=nb.get("evidenceShared"),
+            artist_knowledge=nb.get("artistKnowledge"),
         )
     return context_token.issue(
         query_fingerprint=query_fingerprint,
@@ -695,6 +763,9 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
                 # carry the gated shared descriptors into the context token so /narrative
                 # can ground on them even when MIR criteria are absent.
                 nb["evidenceShared"] = block.get("shared") or []
+        # Narrative v2: the matched artist's own catalog facts (location + tags), for the
+        # context token. Distinct from evidenceShared (the overlap); validated in /narrative.
+        nb["artistKnowledge"] = _artist_knowledge_for(winning_track_id, match)
         matches.append(match)
         winning_neighbors.append(nb)
 
@@ -834,6 +905,7 @@ async def narrative_endpoint(req: NarrativeRequest):
                     for c in (fragment.get("criteria") or [])
                 ],
                 evidenceShared=fragment.get("evidenceShared") or [],
+                artistKnowledge=fragment.get("artistKnowledge") or {},
                 acrcloudCoverSongId=verified.acrcloudCoverSongId,
             )
         except Exception:
