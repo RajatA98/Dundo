@@ -37,10 +37,9 @@ export default function AboutPage() {
           <strong style={{ color: 'var(--color-ink)' }}>Suno</strong>, Hindi for{' '}
           <em>listen</em>) takes an AI-generated track and retrieves indie
           human artists whose sound resonates with what you made. Each match
-          comes with a grounded explanation of <em>why</em>, the underlying
-          acoustic criteria (tempo, key, harmonic content, timbre), a
-          side-by-side spectrogram view, and links to support the artist
-          directly.
+          comes with a grounded explanation of <em>why</em>, the shared sonic
+          descriptors behind it, a side-by-side spectrogram view, and links to
+          give the artist a listen and support them directly.
         </p>
 
         <p>
@@ -52,12 +51,18 @@ export default function AboutPage() {
         </p>
 
         <p>
-          Each upload is embedded with an open-source audio model (MuQ-MuLan,
-          512-d music-text joint embedding at 24 kHz), then nearest-neighbour
-          searched against the local catalog. The discovery narrative is
-          GPT-4o-mini consuming structured metadata — it does not hear audio,
-          it does not determine copyright, and every citation it makes is
-          validated against the supplied context before rendering.
+          The matches themselves are <strong style={{ color: 'var(--color-ink)' }}>deterministic
+          and content-based</strong>: each upload is embedded with an open-source
+          audio model (MuQ-MuLan, a 512-d music-text joint embedding), then
+          nearest-neighbour searched against the catalog with FAISS — the same
+          track always returns the same artists, with no LLM in the loop. Only
+          the <em>explanation</em> is generated: a retrieval-augmented layer feeds
+          GPT-4o-mini structured facts about the already-decided match — the
+          shared descriptors and what the catalog knows about the artist. It
+          never hears the audio and never decides a match, and every claim it
+          makes — from a cited number to an artist's location — is validated
+          against those facts before rendering. Anything unsupported is dropped,
+          not shown.
         </p>
 
         <p>
@@ -68,9 +73,10 @@ export default function AboutPage() {
           >
             measured, not claimed
           </Link>
-          : Recall@1, Recall@3, MRR on a hand-built golden set, plus a top-1
-          cosine histogram on unrelated negatives and named false-positive /
-          false-negative examples with audio playback.
+          : Recall@1, Recall@3, and MRR by leave-one-out over the live catalog,
+          plus a top-1 cosine histogram showing the noise floor on unrelated
+          tracks. The narrative layer has its own gate — a 16-case eval that
+          must reject every hallucinated citation before a build ships.
         </p>
 
         <p>
