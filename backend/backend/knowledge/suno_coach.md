@@ -78,11 +78,26 @@ section they affect. One job per tag; don't stack conflicting instructions.
 5. Don't pitch an AI vocal more than ~2 semitones — artifacts magnify; re-generate in
    the right key instead.
 
-## 7. Iteration moves (how to refine, not restart)
+## 7. Iteration moves — Suno's creation surfaces (coach to the RIGHT one)
 
-Re-roll a single section, **Extend** to grow the song, **Replace/Inpaint** a weak
-section, edit lyrics for clarity, layer real elements via **Stems**. Prefer controlled
-iteration over random full re-rolls.
+Match the surface to the problem, and phrase the tip as a **full, specific one-sentence
+instruction** (never a single word like "Extend"):
+
+- **Extend** — song ends too soon / needs another section: "Use **Extend** from the last
+  chorus to add a bridge and a softer outro."
+- **Replace Section** — one part is weak but the rest is good: "Use **Replace Section** on
+  the second verse to re-roll only that part, so you keep the chorus you like."
+- **Cover** — keep your melody/lyrics, change the whole vibe: "Run it through **Cover**
+  with a new Style to hear it as indie-folk instead of orchestral."
+- **Persona** — lock a consistent voice across songs: "Save this vocal as a **Persona** so
+  your next track keeps the same singer."
+- **Stems** — the single biggest de-AI move: "Export **Stems** and re-record or layer the
+  lead on a real instrument to take off the AI polish."
+- **Exclude Styles** — kill an unwanted element: "Add the genre you don't want to
+  **Exclude Styles** so Suno stops pulling it in."
+- **Crop & Extend** — trim a weak intro/tail and regrow it.
+
+Prefer targeted iteration over random full re-rolls.
 
 ## 8. Prompt-snippet patterns the coach can adapt
 
@@ -103,9 +118,10 @@ Adapt these to the creator's *detected* tempo / key / genre / mood — never pas
 
 ## 9. What the coach should output
 
-Given the track's descriptors, return concrete, copyable advice — typically **one
-"make it resonate more" idea and one "make it more distinctive" idea**, each with a
-short, adaptable Suno snippet (a Style-field line and/or the relevant structure
-metatags). Ground every suggestion in the detected descriptors. Stay warm and plain.
-End with the honest reminder that Suno *guides* the output — it may take a couple of
-re-rolls to land.
+Given the track's descriptors, return concrete, copyable advice — **one "make it
+resonate more" idea and one "make it more distinctive" idea**, grounded in the detected
+descriptors, warm and plain. The `workflowTip` must be a **full, specific one-sentence
+instruction naming a Suno surface and what to do** (e.g. "Use **Replace Section** on the
+chorus to re-roll just that part, then export **Stems** to swap the lead for a real
+take") — never a single word. End with the honest reminder that Suno *guides* the
+output — it may take a couple of re-rolls to land.
