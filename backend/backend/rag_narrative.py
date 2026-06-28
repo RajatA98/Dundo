@@ -191,7 +191,7 @@ Return JSON with exactly this shape:
   ]
 }}
 
-`citations` carry numeric/criterion evidence; `factCitations` carry artist facts (one per artist fact you state in prose). Use [] for either when you cite nothing of that kind. Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made. For creatorAdvice, write three concrete suggestion-style clauses in prose, each tied to the supplied evidence — a cited criterion when criteria are present, otherwise a shared descriptor or the overall acoustic resemblance (with empty citations).
+`citations` carry numeric/criterion evidence; `factCitations` carry artist facts (one per artist fact you state in prose). Use [] for either when you cite nothing of that kind. IMPORTANT: if the context's `criteria` array is empty, `citations` MUST be [] — never invent a tempo/key/timestamp citation. Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made. For creatorAdvice, write three concrete suggestion-style clauses in prose, each tied to the supplied evidence — a cited criterion when criteria are present, otherwise a shared descriptor or the overall acoustic resemblance (with empty citations).
 
 Context:
 {context_json}
