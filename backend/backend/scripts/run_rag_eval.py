@@ -31,6 +31,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -199,6 +200,25 @@ def main() -> int:
     args.out.write_text(json.dumps(result, indent=2) + "\n")
 
     summary = result["summary"]
+
+    # Public summary for the /evaluation page — surfaces the narrative-integrity gates
+    # (citation + fact validation) alongside the retrieval metrics. Read at runtime.
+    public_path = REPO_ROOT / "quality-scorer" / "public" / "corpus" / "rag_eval.json"
+    public_path.parent.mkdir(parents=True, exist_ok=True)
+    public_path.write_text(
+        json.dumps(
+            {
+                "n_cases": summary["n_cases"],
+                "kind_agreement_rate": summary["kind_agreement_rate"],
+                "reason_agreement_rate": summary["reason_agreement_rate"],
+                "baseline_gates": summary["baseline_gates"],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+
     print(f"RAG eval — {summary['n_cases']} cases")
     print(f"  kind agreement   : {summary['kind_agreement_rate']:.2%}")
     print(f"  reason agreement : {summary['reason_agreement_rate']:.2%}")

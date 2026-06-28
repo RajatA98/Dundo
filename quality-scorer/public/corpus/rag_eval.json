@@ -1,0 +1,13 @@
+{
+  "n_cases": 16,
+  "kind_agreement_rate": 1.0,
+  "reason_agreement_rate": 1.0,
+  "baseline_gates": {
+    "happy_path_kind_agreement": 1.0,
+    "low_context_gate_correctness": 1.0,
+    "hallucination_rejection": 1.0,
+    "malformed_rejection": 1.0,
+    "openai_error_handling": 1.0
+  },
+  "generated_at": "2026-06-28T16:44:29.472970+00:00"
+}

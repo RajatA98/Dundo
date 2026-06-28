@@ -8,8 +8,17 @@ import { useEffect, useState } from 'react'
 const PCT = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`)
 const NUM = (x, d = 2) => (x == null ? '—' : Number(x).toFixed(d))
 
+const GATE_LABELS = {
+  hallucination_rejection: 'Hallucinated citations rejected',
+  low_context_gate_correctness: 'Low-confidence cases gated',
+  happy_path_kind_agreement: 'Valid narratives accepted',
+  malformed_rejection: 'Malformed model output rejected',
+  openai_error_handling: 'API errors handled gracefully',
+}
+
 export default function EvaluationPage() {
   const [data, setData] = useState(null)
+  const [rag, setRag] = useState(null)
   const [err, setErr] = useState(false)
 
   useEffect(() => {
@@ -18,6 +27,10 @@ export default function EvaluationPage() {
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((j) => !cancelled && setData(j))
       .catch(() => !cancelled && setErr(true))
+    fetch('/corpus/rag_eval.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((j) => !cancelled && setRag(j))
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -91,6 +104,29 @@ export default function EvaluationPage() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-faint)', marginTop: 6, fontFamily: 'var(--font-mono)' }}>
             <span>0.0</span><span>cosine similarity</span><span>1.0</span>
+          </div>
+        </div>
+      )}
+
+      {rag?.baseline_gates && (
+        <div style={{ marginBottom: 48 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 8 }}>
+            Narrative integrity — the explanation layer is gated too
+          </div>
+          <p style={{ fontSize: 14.5, lineHeight: 1.6, color: 'var(--color-muted)', margin: '0 0 18px', maxWidth: '62ch' }}>
+            The "why this resonates" text never sees audio and only explains an already-decided
+            match. Every cited tempo, key, or artist fact is validated against the supplied
+            context — anything unsupported is rejected, not shown. Measured on a {rag.n_cases}-case
+            golden set; every gate must pass before a build ships.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+            {Object.entries(rag.baseline_gates).map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--color-paper)', border: '1px solid var(--color-line)', borderRadius: 10, padding: '12px 14px' }}>
+                <span style={{ flex: 'none', width: 18, height: 18, borderRadius: 99, background: v >= 1 ? 'var(--color-teal)' : 'var(--color-fail)', color: '#fff', fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{v >= 1 ? '✓' : '!'}</span>
+                <span style={{ fontSize: 13.5, color: 'var(--color-ink-soft)' }}>{GATE_LABELS[k] || k}</span>
+                <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--color-faint)' }}>{PCT(v)}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
