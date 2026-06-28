@@ -55,21 +55,34 @@ function PromptSnippet({ snippet }) {
 // so every tab always carries an honest explanation. Prefers the real shared
 // descriptors; otherwise uses the acoustic-resemblance framing the backend itself
 // emits for strong matches with no shared tags. Never fabricates.
+function humanList(arr) {
+  if (arr.length <= 1) return arr[0] || ''
+  if (arr.length === 2) return `${arr[0]} and ${arr[1]}`
+  return `${arr.slice(0, -1).join(', ')}, and ${arr[arr.length - 1]}`
+}
+// City only — the raw location is "Berlin, DEU"; drop the ISO code for clean prose.
+function cityOf(location) {
+  const city = String(location || '').split(',')[0].trim()
+  return city || null
+}
 function fallbackNarrative(artist, mode = 'whySimilar') {
   const shared = (artist?.evidenceTags?.shared || [])
     .map((t) => formatLabel(t.label))
     .filter(Boolean)
   const who = artist?.name || 'this artist'
+  const city = cityOf(artist?.location)
+  const place = city ? `, out of ${city},` : ''
+  const sound = humanList(shared.slice(0, 3))
   if (mode === 'creatorAdvice') {
     if (shared.length) {
-      return `You both lean on ${shared.slice(0, 3).join(', ')} — to stand apart, push a contrast in rhythm or arrangement and foreground one signature texture the shared sound doesn't have.`
+      return `You and ${who} both live in ${sound}. To stand apart, push a contrast they don't — shift the rhythm or arrangement in your strongest section, and lean into one signature texture that's yours alone.`
     }
-    return `Your track and ${who}'s share a close sonic character — to make yours more distinctive, vary the arrangement where they resemble each other most and lean into a motif that's yours alone.`
+    return `Your track and ${who}'s share a close sonic character. To make yours more distinctive, vary the arrangement where they resemble each other most, and lean into a motif that's yours alone.`
   }
   if (shared.length) {
-    return `You and ${who} share ${shared.slice(0, 3).join(', ')} — that common sonic ground is what surfaced this match.`
+    return `${who}${place} works the same ${sound} territory your track does — that shared sonic ground is what brought them up as a match. Press play and see if it clicks.`
   }
-  return `This match came from a close acoustic resemblance between your track and ${who}'s sound — the strongest similarity sits in the matched section.`
+  return `${who}${place} shares a close acoustic character with what you made — the resemblance is strongest right in the matched section. Worth a listen.`
 }
 const MAX_CHIPS = 4
 

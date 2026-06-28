@@ -153,7 +153,7 @@ def test_prompt_is_artist_framed_discovery_voice() -> None:
     prompt = rag_narrative._build_user_prompt(ctx, "whySimilar")
     system = rag_narrative.SYSTEM_PROMPTS["whySimilar"]
 
-    assert "why this artist resonates with what you made" in system
+    assert "music-discovery guide" in system  # warm, artist-framed discovery voice
     assert "Maya Lev" in prompt
     assert "matchedArtist" in prompt
     assert "copyright" not in system.casefold()
