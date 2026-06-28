@@ -327,6 +327,8 @@ def generate_narrative(
         user_prompt=user_prompt,
         max_tokens=MAX_COMPLETION_TOKENS,
         model_id=model_id,
+        trace_name=f"narrative-{mode}",
+        tags=[mode],
     )
     if payload is None:
         return finish(
@@ -368,6 +370,26 @@ def generate_narrative(
     return finish(narrative, gate_result="called", success=True)
 
 
+def _openai_client_and_traced() -> tuple[Any, bool]:
+    """Return (client, traced). When LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY are set,
+    use Langfuse's drop-in OpenAI client (https://langfuse.com/docs/integrations/openai),
+    which auto-captures model, token usage, latency and cost — the baseline trace
+    requirements — with zero extra code. Otherwise a plain OpenAI client. Observability
+    is opt-in and never a hard dependency: missing keys or package → plain client."""
+    import os
+
+    if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+        try:
+            from langfuse.openai import OpenAI  # drop-in: auto-traces to Langfuse
+
+            return OpenAI(), True
+        except Exception as exc:  # pragma: no cover - missing pkg / bad config
+            logger.warning("Langfuse tracing unavailable, using plain OpenAI: %r", exc)
+    from openai import OpenAI
+
+    return OpenAI(), False
+
+
 def _call_openai_json(
     client,
     *,
@@ -375,13 +397,22 @@ def _call_openai_json(
     user_prompt: str,
     max_tokens: int,
     model_id: str,
+    trace_name: str | None = None,
+    tags: list[str] | None = None,
 ) -> dict | None:
     """Call OpenAI once and return parsed JSON, or None on SDK/parse failure."""
     try:
+        traced = False
         if client is None:
-            from openai import OpenAI
+            client, traced = _openai_client_and_traced()
 
-            client = OpenAI()
+        # Langfuse-only kwargs (descriptive trace name + feature/mode tags so traces are
+        # findable + filterable). Only passed to the Langfuse drop-in client — a plain
+        # OpenAI client would reject `name`/`metadata`.
+        extra: dict[str, Any] = {}
+        if traced:
+            extra["name"] = trace_name or "narrative"
+            extra["metadata"] = {"feature": "narrative", "langfuse_tags": list(tags or [])}
 
         response = client.chat.completions.create(
             model=model_id,
@@ -392,6 +423,7 @@ def _call_openai_json(
             response_format=_response_format_json_schema(),
             max_tokens=max_tokens,
             temperature=0,
+            **extra,
         )
         content = response.choices[0].message.content
         parsed = json.loads(content)

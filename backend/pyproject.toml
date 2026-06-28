@@ -34,6 +34,10 @@ runtime = [
   # layer. Module is loaded lazily inside the endpoint so api.py still boots
   # when OPENAI_API_KEY is unset (endpoint then returns 503 narrative-disabled).
   "openai>=1.40",
+  # LLM observability — Langfuse traces every /narrative call (prompt, response,
+  # latency, cost) and supports dataset/LLM-as-judge evals. Opt-in: active only when
+  # LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY are set; otherwise a plain OpenAI client.
+  "langfuse>=3.0",
   # Pydantic v2 — already a transitive dep via fastapi, but pinned here
   # explicitly because /narrative + rag_narrative both rely on v2 features
   # (discriminated unions, model_dump).

@@ -25,4 +25,7 @@ sentry-sdk[fastapi]>=2.0
 # Endpoint returns 503 narrative-disabled when OPENAI_API_KEY is unset, so
 # this dep is safe to add even before the Space secret is provisioned.
 openai>=1.40
+# LLM observability — Langfuse traces /narrative calls; active only when
+# LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY are set, else a plain OpenAI client.
+langfuse>=3.0
 pydantic>=2.0
