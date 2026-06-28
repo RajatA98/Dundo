@@ -54,7 +54,7 @@ def test_truncated_is_dropped(audio_fixtures) -> None:
 def test_analyze_output_shape(audio_fixtures) -> None:
     r = analyze(audio_fixtures["clean"])
     # The frontend contract: 180-bin waveform, 7 raw signals, list of problems.
-    assert set(r.keys()) == {"raw", "waveform", "problems", "durationSec"}
+    assert set(r.keys()) == {"raw", "waveform", "problems", "durationSec", "loudnessDb"}
     assert len(r["waveform"]) == 180
     assert all(0.0 <= v <= 1.0 for v in r["waveform"])
     assert set(r["raw"].keys()) == {

@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 
 # Bump this (and coordinate frontend + narrative schema) on any breaking shape change.
 # v2: adds optional ArtistMatch.evidenceTags (Evidence Layer, mtg-knn-v1).
-CONTRACT_VERSION = "artist-v2"
+CONTRACT_VERSION = "artist-v3"  # v3: adds querySummary ("Your song's stats") to the response
 
 SupportKind = Literal[
     "jamendo", "fma", "bandcamp", "patreon", "website", "spotify", "other"
@@ -136,6 +136,12 @@ class ArtistNeighborsResponse(BaseModel):
     # (dev / no-narrative mode). Keep nullable rather than forcing signing to always be configured.
     contextToken: Optional[str] = Field(
         None, description="HMAC-signed token carrying per-match narrative context; null when signing is unconfigured"
+    )
+    # "Your song's stats": honest snapshot of the UPLOAD — tempo/key/mode/duration/energy
+    # band + its real k-NN-propagated genre/mood/instrument tags. Optional (null when the
+    # analysis or catalog tags are unavailable).
+    querySummary: Optional[dict] = Field(
+        None, description="Upload's own stats: {tempoBpm, key, mode, keyConfidence, durationSec, energyBand, tags}"
     )
 
 

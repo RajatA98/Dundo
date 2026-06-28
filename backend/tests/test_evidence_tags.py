@@ -1,4 +1,4 @@
-from backend.evidence_tags import Neighbor, assemble_evidence_tags
+from backend.evidence_tags import Neighbor, assemble_evidence_tags, assemble_query_profile
 
 CATALOG = {
     "cand": {"coarseGenre": ["rock"], "instrument": ["guitar"]},
@@ -25,6 +25,27 @@ def test_overlap_with_candidate_excluded():
     assert block["neighborCount"] == 3          # 'same' excluded
     # the candidate-artist neighbor's tag never leaks into the query/overlap (no circular evidence)
     assert all(t["label"] != "jazz" for t in block["query"])
+
+
+def test_query_profile_votes_all_neighbors_no_exclusion():
+    # The upload's own descriptor profile (for the stats panel): votes over ALL
+    # neighbors, no candidate exclusion, grouped by kind, gated at tau.
+    neighbors = [
+        Neighbor("n1", "artistA", 0.9),  # rock + guitar
+        Neighbor("n2", "artistB", 0.8),  # rock
+        Neighbor("n3", "artistC", 0.2),  # electronic (weak)
+    ]
+    profile = assemble_query_profile(neighbors, CATALOG, tau=0.3, pool=10)
+    genres = {t["label"] for t in profile.get("genre", [])}
+    assert "rock" in genres            # dominant → above tau
+    assert "electronic" not in genres  # weak (0.2 share) → gated out
+    assert "guitar" in {t["label"] for t in profile.get("instrument", [])}
+    # every surviving descriptor carries a confidence share
+    assert all("confidence" in t for vals in profile.values() for t in vals)
+
+
+def test_query_profile_empty_without_tags():
+    assert assemble_query_profile([Neighbor("x", "a", 0.9)], {}, tau=0.3) == {}
 
 
 def test_tau_gates_weak_descriptors():

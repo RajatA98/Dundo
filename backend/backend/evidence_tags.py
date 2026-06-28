@@ -118,3 +118,43 @@ def assemble_evidence_tags(
         "neighborCount": used,
         "excludedCandidate": candidate_artist is not None,
     }
+
+
+def assemble_query_profile(
+    neighbors: list[Neighbor],
+    catalog_tags: dict[str, dict],
+    *,
+    tau: float = TAU_DEFAULT,
+    pool: int = POOL_DEFAULT,
+) -> dict[str, list[dict]]:
+    """The UPLOAD's own descriptor profile for the "Your song" stats panel.
+
+    Similarity-weighted vote of the upload's acoustic neighbors' real MTG tags
+    (k-NN propagation, NO candidate exclusion — this is a global profile, not a
+    per-match overlap). Returns {"genre"/"mood"/"instrument": [{label, confidence}]},
+    each gated at tau and sorted by share. Empty {} when nothing clears the gate.
+    """
+    votes: dict[tuple[str, str], float] = defaultdict(float)
+    total = 0.0
+    used = 0
+    for nb in neighbors:
+        entry = catalog_tags.get(nb.track_id)
+        if not entry:
+            continue
+        w = float(nb.sim)
+        if w <= 0:
+            continue
+        total += w
+        for kl in _flatten(entry):
+            votes[kl] += w
+        used += 1
+        if used >= pool:
+            break
+    if total <= 0 or not votes:
+        return {}
+    shares = {kl: v / total for kl, v in votes.items()}
+    by_kind: dict[str, list[dict]] = {}
+    for (kind, label), share in sorted(shares.items(), key=lambda x: -x[1]):
+        if share >= tau:
+            by_kind.setdefault(kind, []).append({"label": label, "confidence": round(share, 3)})
+    return by_kind

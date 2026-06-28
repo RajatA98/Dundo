@@ -87,11 +87,17 @@ def analyze_array(
     waveform = _waveform_peaks(mono, n_bins=config.WAVEFORM_BINS)
     problems = _problem_regions(mono, sr, raw, n_bins=config.WAVEFORM_BINS)
 
+    # Mean RMS loudness in dBFS — an honest intensity proxy for the "energy" stat.
+    # Surfaced top-level (not in `raw`) so the scoring/report path is untouched.
+    rms_mean = float(np.sqrt(np.mean(np.square(mono)))) if mono.size else 0.0
+    loudness_db = 20.0 * math.log10(max(rms_mean, EPS))
+
     return {
         "raw": raw,
         "waveform": waveform,
         "problems": problems,
         "durationSec": duration_sec,
+        "loudnessDb": loudness_db,
     }
 
 

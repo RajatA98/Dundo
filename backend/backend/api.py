@@ -458,6 +458,39 @@ def _build_track(file: UploadFile, pipeline: dict, *, source: str, id_: str) -> 
     }
 
 
+def _energy_band(loudness_db: float | None) -> str | None:
+    """Map mean RMS loudness (dBFS) to an honest qualitative intensity band.
+    A band, never a fake 0-1 score — 'measured, not claimed'."""
+    if loudness_db is None:
+        return None
+    if loudness_db >= -16.0:
+        return "High"
+    if loudness_db >= -24.0:
+        return "Medium"
+    return "Low"
+
+
+def _build_query_summary(pipeline: dict, tag_profile: dict[str, list[dict]]) -> dict:
+    """The 'Your song's stats' snapshot for the upload — honest, from analysis we
+    already run: tempo, key+mode (+confidence), duration, an energy band, and the
+    upload's real k-NN-propagated genre/mood/instrument tags. Perceptual things
+    are bands/tags, never fabricated decimals."""
+    mir = pipeline.get("mir")
+    analysis = pipeline.get("analysis") or {}
+    summary: dict = {
+        "durationSec": analysis.get("durationSec"),
+        "energyBand": _energy_band(analysis.get("loudnessDb")),
+        "tags": tag_profile or {},
+    }
+    if mir is not None:
+        tempo = float(getattr(mir, "tempo_bpm", 0.0) or 0.0)
+        summary["tempoBpm"] = round(tempo) if tempo > 0 else None
+        summary["key"] = getattr(mir, "key", None)
+        summary["mode"] = getattr(mir, "mode", None)
+        summary["keyConfidence"] = round(float(getattr(mir, "key_confidence", 0.0) or 0.0), 2)
+    return summary
+
+
 _CRITERION_LABELS = {
     "tempo": "Tempo",
     "key": "Key",
@@ -770,7 +803,15 @@ async def neighbors_endpoint(file: UploadFile = File(...), k: int = 5):
         winning_neighbors.append(nb)
 
     ctx_token = _issue_context_token_for_neighbors(query_fingerprint, winning_neighbors)
-    return ArtistNeighborsResponse(matches=matches, contextToken=ctx_token).model_dump()
+    # "Your song's stats": honest snapshot of the upload (tempo/key/duration/energy +
+    # its real k-NN-propagated genre/mood/instrument tags, voted over all neighbors).
+    tag_profile = (
+        evidence_tags.assemble_query_profile(ev_neighbors, _catalog_tags) if ev_neighbors else {}
+    )
+    query_summary = _build_query_summary(pipeline, tag_profile)
+    return ArtistNeighborsResponse(
+        matches=matches, contextToken=ctx_token, querySummary=query_summary
+    ).model_dump()
 
 
 def _criteria_to_token_fragment(criteria_block: dict | None) -> list[dict] | None:
