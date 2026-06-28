@@ -394,6 +394,24 @@ def test_hallucinated_location_fact_rejected() -> None:
     assert result.reason == "fact-hallucinated"
 
 
+def test_location_validation_is_exact_alias_not_substring() -> None:
+    # Codex polish: location facts must EXACTLY match a normalized alias — a substring
+    # like "Utre" (of "utrecht") is no longer accepted.
+    ctx = _context(criteria=[])
+    ctx.artistKnowledge = _ak()
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "This Utre-based artist shares your sound.",
+        "citations": [],
+        "factCitations": [{"type": "location", "value": "Utre"}],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload):
+        result = rag_narrative.generate_narrative(ctx, "whySimilar", model_sha="m", catalog_sha="c")
+    assert isinstance(result, NarrativeUnavailable)
+    assert result.reason == "fact-hallucinated"
+
+
 def test_artist_fact_claimed_with_no_knowledge_rejected() -> None:
     # artistKnowledge empty but the LLM still asserts a fact → reject (can't invent).
     ctx = _context(criteria=[])  # artistKnowledge defaults to {}

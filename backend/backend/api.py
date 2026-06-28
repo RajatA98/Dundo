@@ -582,6 +582,9 @@ def _artist_knowledge_for(track_id: str, match) -> dict:
 
     ak: dict = {}
     if display_location:
+        # The display value itself is a valid alias, so exact-membership validation
+        # accepts the LLM citing the location string it was shown (Codex review).
+        aliases.add(display_location.lower())
         ak["location"] = display_location
         ak["locationAliases"] = sorted(a for a in aliases if a)
     if genres:

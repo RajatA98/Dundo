@@ -550,8 +550,10 @@ def _fact_citations_are_grounded(
         if not value:
             return False
         if fc.type == "location":
-            # match if the cited value equals/contains/is-contained-by a known alias
-            if not any(value == a or value in a or a in value for a in loc_aliases):
+            # Exact normalized alias membership (Codex review). The prompt requires the
+            # cited value to be an exact value drawn from artistKnowledge, so we do NOT
+            # do fuzzy substring matching — "Utrecht-based" in prose still cites "Utrecht".
+            if value not in loc_aliases:
                 return False
         elif fc.type == "tag":
             if value not in tags:
