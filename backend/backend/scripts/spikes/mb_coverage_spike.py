@@ -5,8 +5,8 @@ Samples N artists from artists.json, queries the MusicBrainz search API
 (1 req/s, proper UA), disambiguates by name + area, and for confident matches
 does a lookup (inc=tags+genres+url-rels) to measure how RICH the facts are.
 
-Prints a coverage report. NOT committed (underscore-prefixed, like the evidence
-spikes). Run: backend/.venv/bin/python -m backend.scripts._mb_coverage_spike
+Prints a coverage report. Provenance-only spike (see scripts/spikes/README.md),
+not maintained or run in CI. Run: backend/.venv/bin/python -m backend.scripts.spikes.mb_coverage_spike
 """
 from __future__ import annotations
 
