@@ -104,7 +104,8 @@ The catalog is built **offline** by `python -m backend.scripts.rebuild_corpus`: 
 
 Two independent kinds of rigor, both surfaced on the **[/evaluation](https://dundo-music.vercel.app/evaluation)** page:
 
-- **Retrieval quality** — `Recall@1` (0.64), `Recall@3` (0.74), `MRR` (0.69) by leave-one-out over the live catalog, plus a top-1 cosine histogram showing the noise floor on unrelated tracks. *"When Dundo says these artists sound like you, how often is it right?"*
+- **Retrieval quality** — `Recall@1` (0.64), `Recall@3` (0.74), `MRR` (0.69) by leave-one-out over the live catalog, plus a top-1 cosine histogram showing the noise floor on unrelated tracks. *"Can the pipeline find a same-artist track at all?"* This is a self-retrieval check — it does not by itself validate that a *different* artist's match genuinely resembles the query.
+- **Cross-artist relevance** — `cross_artist_tag_overlap` in the same eval run checks whether each query's top-3 *genuinely different-artist* neighbors share a real MTG-Jamendo genre/mood tag with it, reported against a random-baseline floor. *"When Dundo says a different artist resonates, is that grounded in something real?"*
 - **Narrative integrity** — a 16-case golden-set RAG eval (`python -m backend.scripts.run_rag_eval`) that gates every CI build on five metrics at 1.0: hallucinated-citation rejection, low-confidence gating, valid-narrative acceptance, malformed-output rejection, and API-error handling. *"When Dundo explains a match, is the explanation honest?"*
 
 **Live observability**: `GET /narrative/stats` exposes in-process counters (calls by mode / kind / error, p50/p95/p99 latency, rough cost) and **Langfuse** traces every `/narrative` call (prompt, response, latency, cost) and supports dataset/LLM-as-judge evals — no-op when keys are unset.

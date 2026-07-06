@@ -87,6 +87,31 @@ def main() -> None:
     # ---- compute retrieval metrics on positives ------------------------
     metrics = compute_metrics(positive_results)
 
+    # ---- cross-artist tag-overlap (loo only; needs catalog_tags.json) ---
+    # Answers what self-retrieval can't: do the top-3 *different-artist*
+    # neighbors actually share a real editorial genre/mood tag with the
+    # query? Reported against a random-baseline floor. Skipped gracefully
+    # when the tags sidecar isn't in the local corpus dir (it ships with
+    # the full HF Dataset corpus, not the small local one).
+    cross_artist_metrics = None
+    if args.mode == "loo":
+        tags_path = CORPUS_DIR / "catalog_tags.json"
+        if tags_path.exists():
+            from backend.eval_metrics import cross_artist_tag_overlap
+
+            catalog_tags = json.loads(tags_path.read_text())
+            catalog_tags.pop("_meta", None)
+            cross_artist_metrics = cross_artist_tag_overlap(positive_results, catalog_tags)
+            print(
+                f"[eval] cross-artist tag-overlap@3: "
+                f"{cross_artist_metrics['crossArtistTagOverlapAt3']} "
+                f"(random baseline {cross_artist_metrics['randomBaselineTagOverlapAt3']}, "
+                f"n={cross_artist_metrics['n']}, "
+                f"skipped_no_tags={cross_artist_metrics['skippedNoTags']})"
+            )
+        else:
+            print(f"[eval] {tags_path} not found — skipping cross-artist tag-overlap metric")
+
     # ---- top-1 cosine histogram on negatives ---------------------------
     histogram = compute_histogram(negative_results, bins=20, lo=0.0, hi=1.0)
 
@@ -110,6 +135,7 @@ def main() -> None:
     # ---- assemble eval.json --------------------------------------------
     eval_doc = {
         "metrics": metrics,
+        "cross_artist_tag_overlap": cross_artist_metrics,
         "negatives_histogram": histogram,
         "latency": latency,
         "named_examples": {
