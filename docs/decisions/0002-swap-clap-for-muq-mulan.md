@@ -156,7 +156,7 @@ Cheapest option: do nothing. UX would still feel broken without ADR-0001's calib
 - The decision becomes an auditable engineering claim: the 2025 SOTA encoder was compared head-to-head with the 2023 baseline on the project's own catalog, and the winner was chosen from measured deltas (Recall@1 0.394 → 0.639, discrimination ratio 0.036 → 0.451), not assumed. A cross-track semantic eval on public cover-song data (Da-TACOS / SHS100K) remains queued in ADR-0003 — self-retrieval numbers alone don't validate cross-artist matches, and this ADR doesn't claim they do.
 - The cosine distribution should genuinely spread (the model is trained with better contrastive coverage), which reduces the anisotropy disease the calibration is currently masking.
 - The ADR commitment to "before and after" eval numbers turns this into a verifiable engineering claim, not a vibe.
-- The architecture story becomes useful for the Suno application: "the right model for AI-music similarity in 2026 is not the 2023 research baseline; here's the data on why."
+- The architecture claim it supports is defensible: the right encoder for AI-music similarity in 2026 is not the 2023 research baseline, and the measured deltas above are the evidence for that.
 
 ### Negative / costs
 
