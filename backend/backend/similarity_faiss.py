@@ -2,7 +2,9 @@
 
 Selected by `SIMILARITY_BACKEND=faiss` env var. Default backend stays NumPy
 (see similarity.py). This module proves the climb to the next rung is wired
-without changing production behavior — see ADR-0007 for the trigger conditions.
+without changing production behavior — see `bench_similarity.py` and
+ADR-0003 for the measured NumPy/FAISS crossover (~10k tracks), which is the
+actual trigger condition for flipping this env var in production.
 
 Architecture:
     1. FAISS IndexFlatIP over the catalog's mean vectors. Same exact cosine as
