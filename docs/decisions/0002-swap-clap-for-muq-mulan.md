@@ -111,7 +111,7 @@ Expected wall-clock: 45-90 minutes on the laptop CPU. Network fetches dominate t
 
 The other path the earlier research surfaced. Strictly cheaper (~30 min of code, no re-encode required, no new dependency). Literature reports mean-centering alone drops unrelated-pair cosines from 0.93-0.99 down to 0.4-0.7.
 
-**Rejected because**: it fixes the symptom inside a known-limited model. A swap to MuQ-MuLan plus calibration tackles both the symptom AND the underlying model quality. The competitive-landscape research showed that "I used CLAP" is a weak technical claim regardless of how clever the post-processing is. The pitch for Suno's Product Engineer role is materially stronger with "shipped on 2025 SOTA + measured the delta" than with "shipped on 2023 baseline + a clever calibration."
+**Rejected because**: it fixes the symptom inside a known-limited model. A swap to MuQ-MuLan plus calibration tackles both the symptom AND the underlying model quality — mean-centering only patches the anisotropy on top of a 2023 baseline that will keep producing weaker discrimination than a model trained with better contrastive coverage. Shipping on a 2025 SOTA encoder with a measured before/after delta is the stronger engineering outcome on its own terms: the calibration layer stays as a safety net, and the underlying cosine geometry actually improves instead of being masked.
 
 **Reconsider if**: MuQ-MuLan empirically fails to improve discrimination on the LOO eval (R@1 / discrimination-ratio do not move materially). In that case the swap is sunk cost and mean-centering goes back on the table.
 
@@ -145,7 +145,7 @@ Different tool for a different question. Fingerprinting answers "is this an exac
 
 Cheapest option: do nothing. UX would still feel broken without ADR-0001's calibration + this swap.
 
-**Rejected because**: PiedPiper would not be technically interesting enough to anchor a Suno Product Engineer pitch.
+**Rejected because**: this leaves the underlying anisotropy problem unsolved and relies on ACRCloud (a third-party black box) to compensate for a known weakness in the primary retrieval signal, instead of fixing the retrieval signal itself.
 
 ---
 
@@ -153,7 +153,7 @@ Cheapest option: do nothing. UX would still feel broken without ADR-0001's calib
 
 ### Positive
 
-- The headline pitch becomes substantively stronger: "I shipped a 2025 SOTA music encoder, compared it head-to-head with the 2023 baseline on my own catalog and the Da-TACOS public benchmark, and chose [winner] based on the data." That's an engineering decision, not a hobbyist's choice.
+- The decision becomes an auditable engineering claim: the 2025 SOTA encoder was compared head-to-head with the 2023 baseline on the project's own catalog, and the winner was chosen from measured deltas (Recall@1 0.394 → 0.639, discrimination ratio 0.036 → 0.451), not assumed. A cross-track semantic eval on public cover-song data (Da-TACOS / SHS100K) remains queued in ADR-0003 — self-retrieval numbers alone don't validate cross-artist matches, and this ADR doesn't claim they do.
 - The cosine distribution should genuinely spread (the model is trained with better contrastive coverage), which reduces the anisotropy disease the calibration is currently masking.
 - The ADR commitment to "before and after" eval numbers turns this into a verifiable engineering claim, not a vibe.
 - The architecture story becomes useful for the Suno application: "the right model for AI-music similarity in 2026 is not the 2023 research baseline; here's the data on why."
