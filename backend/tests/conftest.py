@@ -19,18 +19,23 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from backend import rag_narrative
+from backend import rag_narrative, rate_limit
 
 REPO = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(autouse=True)
-def _reset_narrative_cache():
-    """The narrative cache is process-global; without this, tests that reuse
-    the same NarrativeContext (many do — see test_rag_narrative.py's shared
-    `_context()` helper) would see a cached result from a previous test
-    instead of exercising their own mocked `_call_openai_json` return value."""
+def _reset_narrative_state():
+    """Both the narrative cache and the /narrative rate limiter are
+    process-global. Without resetting them, (a) tests that reuse the same
+    NarrativeContext would see a stale cached result instead of exercising
+    their own mocked `_call_openai_json` return value, and (b) the ~17 tests
+    across test_narrative_endpoint.py + test_narrative_e2e.py that all hit
+    /narrative from the same TestClient host would eventually trip the rate
+    limiter and fail with 429 instead of the status they're actually
+    testing for."""
     rag_narrative.clear_narrative_cache()
+    rate_limit.reset()
     yield
 PARITY_SCRIPT = REPO / "scripts" / "parity_check.mjs"
 

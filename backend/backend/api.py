@@ -33,7 +33,7 @@ from pathlib import Path
 import librosa
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 # place via clap_windowed's swap. We still import clap_engine here only because
 # legacy code paths may reference it; the encoder load + genre tagging both go
 # through muq_engine.
-from . import __version__, artist_response, context_token, corpus_dataset, muq_engine, narrative_telemetry, clap_windowed, config, evidence_tags, mir_features, similarity
+from . import __version__, artist_response, context_token, corpus_dataset, muq_engine, narrative_telemetry, clap_windowed, config, evidence_tags, mir_features, rate_limit, similarity
 from .artist import ArtistNeighborsResponse, Criterion, EvidenceTags
 from .librosa_engine import analyze_array
 from .scoring import compute_report
@@ -918,11 +918,26 @@ _TOKEN_ERROR_TO_HTTP = {
 
 
 @app.post("/narrative")
-async def narrative_endpoint(req: NarrativeRequest):
+async def narrative_endpoint(req: NarrativeRequest, request: Request):
     """RAG explanatory layer — see ADR-0005 for the full spec."""
     if (err := _warming_err()) is not None:
         return err
     with narrative_telemetry.measure_call(req.mode) as tel:
+        # Gate 0: per-client rate limit. /narrative is the one endpoint in
+        # this API that spends real money per call (GPT-4o-mini) — everything
+        # else is local compute. Keyed on the first X-Forwarded-For hop
+        # because the Space sits behind HF's proxy (see rate_limit.py).
+        key = rate_limit.client_key(
+            request.headers.get("x-forwarded-for"),
+            request.client.host if request.client else "unknown",
+        )
+        if not rate_limit.allow(
+            key,
+            max_requests=config.NARRATIVE_RATE_LIMIT_MAX,
+            window_s=config.NARRATIVE_RATE_LIMIT_WINDOW_S,
+        ):
+            tel.set(error_code="rate-limited")
+            return _err(429, "rate-limited")
         # Gate 1: OpenAI key present. Without it we can't call GPT-4o-mini.
         if not os.getenv("OPENAI_API_KEY", "").strip():
             tel.set(error_code="narrative-disabled")

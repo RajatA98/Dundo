@@ -464,3 +464,29 @@ def test_stats_endpoint_tracks_low_confidence_and_errors(configured_env):
     assert stats["by_kind"]["low_confidence"] == 1
     assert stats["gate_short_circuits"] == 1
     assert stats["by_error"]["not-in-context"] == 1
+
+
+def test_rate_limit_returns_429_after_max_requests(configured_env, monkeypatch):
+    from backend import config as config_module
+
+    monkeypatch.setattr(config_module, "NARRATIVE_RATE_LIMIT_MAX", 2, raising=True)
+
+    token = _issue_test_token()
+    expected = rag_narrative.NarrativeResponse(
+        mode="whySimilar",
+        prose="The tracks share the same tempo and key.",
+        citations=[],
+    )
+    body = {
+        "contextToken": token,
+        "trackId": "tier1:itunes:380907765",
+        "mode": "whySimilar",
+    }
+    with patch("backend.rag_narrative.generate_narrative", return_value=expected):
+        with _client() as c:
+            assert c.post("/narrative", json=body).status_code == 200
+            assert c.post("/narrative", json=body).status_code == 200
+            r3 = c.post("/narrative", json=body)
+
+    assert r3.status_code == 429
+    assert r3.json()["error"] == "rate-limited"
