@@ -122,6 +122,7 @@ The catalog is **Creative-Commons-licensed indie music** — ~49K tracks from MT
 - **No multimodal LLM ingest of raw audio** — the LLM receives structured metadata only.
 - **No fabricated stats** — no Spotify-style danceability/valence decimals (their API was deprecated and open approximations are noisy); only what one file yields honestly + real editorial tags.
 - **No premature scaling** — FAISS Flat (exact) serves the catalog; no heavier vector DB until ~1M vectors.
+- **No concurrent inference yet** — audio inference is intentionally serialized onto one dedicated thread (`api.py`'s `_infer_executor`), which fixed a real torch-OMP thread-affinity deadlock (overlapping requests on a generic thread pool re-trigger it). The honest tradeoff: concurrent uploads queue behind each other rather than running in parallel. The known path forward (a bounded pool of single-thread executors with per-executor warmed model instances, or inference as a separately autoscaled service) needs more RAM than the current free-tier Space — documented here rather than left for a load test to find.
 
 ## Run it
 
