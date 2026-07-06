@@ -11,11 +11,15 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, ValidationError
+
+from . import config
 
 NarrativeMode = Literal["whySimilar", "creatorAdvice", "craftResonate", "craftUnique"]
 # The Suno-coach modes (get the KB injected + return a promptSnippet). whySimilar is
@@ -294,6 +298,35 @@ Context:
 """
 
 
+_CACHE_LOCK = threading.Lock()
+_NARRATIVE_CACHE: "OrderedDict[str, NarrativeResponse]" = OrderedDict()
+
+
+def clear_narrative_cache() -> None:
+    """Empty the in-process narrative cache. Test-only hook — production
+    code never needs to call this; the cache key already encodes model SHA,
+    catalog SHA, and prompt-template/schema versions, so a stale entry is
+    unreachable (a new key) rather than wrong."""
+    with _CACHE_LOCK:
+        _NARRATIVE_CACHE.clear()
+
+
+def _cache_get(key: str) -> "NarrativeResponse | None":
+    with _CACHE_LOCK:
+        result = _NARRATIVE_CACHE.get(key)
+        if result is not None:
+            _NARRATIVE_CACHE.move_to_end(key)
+        return result
+
+
+def _cache_put(key: str, result: "NarrativeResponse") -> None:
+    with _CACHE_LOCK:
+        _NARRATIVE_CACHE[key] = result
+        _NARRATIVE_CACHE.move_to_end(key)
+        while len(_NARRATIVE_CACHE) > config.NARRATIVE_CACHE_MAX_ENTRIES:
+            _NARRATIVE_CACHE.popitem(last=False)
+
+
 def cache_key(
     context: NarrativeContext,
     mode: NarrativeMode,
@@ -338,6 +371,11 @@ def generate_narrative(
 ) -> NarrativeResult:
     start = time.perf_counter()
     key = cache_key(context, mode, model_sha=model_sha, catalog_sha=catalog_sha, model_id=model_id)
+
+    cached = _cache_get(key)
+    if cached is not None:
+        logger.info("rag_narrative cache_key=%s mode=%s gate_result=cache-hit", key, mode)
+        return cached
 
     def finish(result: NarrativeResult, *, gate_result: str, success: bool) -> NarrativeResult:
         latency_ms = (time.perf_counter() - start) * 1000
@@ -410,6 +448,7 @@ def generate_narrative(
             success=False,
         )
 
+    _cache_put(key, narrative)
     return finish(narrative, gate_result="called", success=True)
 
 

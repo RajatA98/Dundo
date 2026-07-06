@@ -20,6 +20,10 @@ WAVEFORM_BINS = 180           # the frontend Waveform component expects exactly 
 # (3 windows) keeps the demo snappy on CPU; raise via CLIP_CAP_S for finer matching.
 CLIP_CAP_S = int(os.getenv("CLIP_CAP_S", "30"))
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+# In-process narrative cache size (LRU). Repeat /narrative calls for an identical
+# context+mode short-circuit the GPT-4o-mini call. Env-tunable.
+NARRATIVE_CACHE_MAX_ENTRIES = int(os.getenv("NARRATIVE_CACHE_MAX_ENTRIES", "512"))
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".flac", ".ogg", ".m4a"}
 ALLOWED_MIME_PREFIX = "audio/"
 

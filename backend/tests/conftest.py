@@ -19,7 +19,19 @@ import numpy as np
 import pytest
 import soundfile as sf
 
+from backend import rag_narrative
+
 REPO = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(autouse=True)
+def _reset_narrative_cache():
+    """The narrative cache is process-global; without this, tests that reuse
+    the same NarrativeContext (many do — see test_rag_narrative.py's shared
+    `_context()` helper) would see a cached result from a previous test
+    instead of exercising their own mocked `_call_openai_json` return value."""
+    rag_narrative.clear_narrative_cache()
+    yield
 PARITY_SCRIPT = REPO / "scripts" / "parity_check.mjs"
 
 SR = 22050
