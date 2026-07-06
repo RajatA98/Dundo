@@ -47,7 +47,7 @@ from .artist import ArtistNeighborsResponse, Criterion, EvidenceTags
 from .librosa_engine import analyze_array
 from .scoring import compute_report
 
-# ADR-0007: SIMILARITY_BACKEND flag lets us swap NumPy → FAISS Flat without
+# ADR-0003: SIMILARITY_BACKEND flag lets us swap NumPy → FAISS Flat without
 # changing any return shape. Default stays NumPy. The bench at
 # `python -m backend.scripts.bench_similarity` documents the crossover
 # (~10k tracks) where FAISS starts paying for itself.

@@ -1,4 +1,4 @@
-"""Tests for the FAISS-backed similarity backend (ADR-0007).
+"""Tests for the FAISS-backed similarity backend (see ADR-0003 + bench_similarity.py).
 
 The contract is: same return shape as similarity.top_k_neighbors, same
 numbers within float32 noise tolerance. FAISS Flat is exact (no recall

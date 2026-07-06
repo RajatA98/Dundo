@@ -1,6 +1,6 @@
 """Benchmark NumPy vs FAISS Flat vs FAISS HNSW on synthetic catalogs.
 
-ADR-0007 (RAG scaling) needs measured numbers, not just claims. This script
+The RAG scaling decision (ADR-0003) needs measured numbers, not just claims. This script
 synthesizes L2-normalized random catalogs at 1k / 10k / 100k / 1M tracks
 and measures top-K query latency for three backends:
 
@@ -11,7 +11,7 @@ and measures top-K query latency for three backends:
      recall@1 ~0.95 at default ef_search.
 
 For each backend, report query p50/p95/p99 latency across 200 queries.
-Output is a markdown table that can be pasted directly into ADR-0007.
+Output is a markdown table documenting the NumPy/FAISS crossover for ADR-0003.
 
 Run:
     python -m backend.scripts.bench_similarity
@@ -168,7 +168,7 @@ def run(sizes: list[int], out_json: Path | None) -> dict:
 
 
 def print_markdown_table(summary: dict) -> None:
-    """Render the ADR-0007 exhibit table."""
+    """Render the crossover exhibit table (ADR-0003)."""
     rows = summary["rows"]
     sizes = sorted({r["n"] for r in rows})
     backends = ["numpy", "faiss_flat", "faiss_hnsw"]
@@ -202,7 +202,7 @@ def main() -> int:
         "--json",
         type=Path,
         default=None,
-        help="Optional path to write the summary JSON (e.g. for ADR-0007 exhibit).",
+        help="Optional path to write the summary JSON (e.g. for the ADR-0003 crossover exhibit).",
     )
     args = parser.parse_args()
 
