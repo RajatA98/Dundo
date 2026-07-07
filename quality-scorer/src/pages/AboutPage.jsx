@@ -75,21 +75,12 @@ export default function AboutPage() {
           </Link>
           : Recall@1, Recall@3, and MRR by leave-one-out over the live catalog,
           plus a top-1 cosine histogram showing the noise floor on unrelated
-          tracks. The narrative layer has its own gate — a 16-case eval that
+          tracks. The narrative layer has its own gate — a 19-case eval that
           must reject every hallucinated citation before a build ships.
         </p>
 
         <p>
-          Dundo is forked from{' '}
-          <a
-            href="https://github.com/RajatA98/PiedPiper"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: 'var(--color-accent)', textDecoration: 'none' }}
-          >
-            PiedPiper
-          </a>
-          , the original acoustic-similarity research project. See{' '}
+          Dundo grew out of an earlier acoustic-similarity research project. See{' '}
           <a
             href="https://github.com/RajatA98/Dundo"
             target="_blank"
