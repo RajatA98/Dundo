@@ -16,10 +16,18 @@ WAVEFORM_BINS = 180           # the frontend Waveform component expects exactly 
 # --- live-upload caps ---------------------------------------------------------
 
 # Truncate uploads before windowed MuQ encoding. Each 10 s window is a separate
-# CPU forward pass, so this directly sets /neighbors latency. Env-tunable: 30 s
-# (3 windows) keeps the demo snappy on CPU; raise via CLIP_CAP_S for finer matching.
-CLIP_CAP_S = int(os.getenv("CLIP_CAP_S", "30"))
+# CPU forward pass, so this directly sets /neighbors latency. Default 480 s (8 min)
+# effectively covers any real Suno/Udio track full-length (measured ~1.14s/window,
+# so a ~3 min song's ~17 windows costs ~19s encode / ~28s end-to-end on the Space —
+# see the raised client timeout in api.js) while still bounding a pathological
+# upload; MAX_UPLOAD_BYTES below is the other guard. Env-tunable via CLIP_CAP_S.
+CLIP_CAP_S = int(os.getenv("CLIP_CAP_S", "480"))
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+# MIR (tempo/key/chroma/MFCC via librosa) is stable well before full-song length,
+# so cap the MIR analysis window separately from the (now full-song) MuQ encode —
+# running librosa over an 8-minute buffer would add latency for no matching gain.
+MIR_ANALYSIS_MAX_S = int(os.getenv("MIR_ANALYSIS_MAX_S", "60"))
 
 # In-process narrative cache size (LRU). Repeat /narrative calls for an identical
 # context+mode short-circuit the GPT-4o-mini call. Env-tunable.
@@ -64,8 +72,9 @@ CLAP_GENRE_TEMPERATURE = 10.0
 # normalized to produce a single track-level embedding. Matches PROJECT_PLAN
 # Phase 1 + 2 acceptance criteria and LOCKED_DECISIONS track-length protocol.
 CLAP_WINDOW_SECONDS = 10
-# Soft cap on the per-window count; matches existing CLIP_CAP_S=90 above so a
-# 90 s query produces at most 9 windows. Catalog inputs (30 s previews) produce 1–3.
+# Soft cap on the per-window count; tied to CLIP_CAP_S above, so a full-length
+# (up to 480 s) query produces at most ~48 windows. Catalog inputs (30 s previews)
+# produce 1-3.
 CLAP_QUERY_MAX_SECONDS = CLIP_CAP_S
 CLAP_POOLING = "l2_normalized_mean"
 

@@ -75,7 +75,13 @@ export async function analyzeUpload(file) {
 // (timeout, network drop, 5xx, 503 warming-up). Deterministic 4xx (bad/oversized
 // file) are NOT retried — retrying the same file can't help. One initial try plus
 // two retries turns a ~12% stall rate into ~0.2%.
-const NEIGHBORS_ATTEMPT_TIMEOUT_MS = 35_000
+//
+// The backend now encodes the FULL uploaded song (not just the first 30s) —
+// measured ~1.14s/window, so a ~3 min track's ~17 windows costs ~19s encode /
+// ~28s end-to-end on the Space. 35s was tight enough to trip on a full-length
+// upload (aborting into a retry that doubles load on the single inference
+// thread), so this is raised to comfortably clear that plus a slower Space.
+const NEIGHBORS_ATTEMPT_TIMEOUT_MS = 75_000
 const NEIGHBORS_MAX_ATTEMPTS = 3
 
 function _isRetryableStatus(status) {

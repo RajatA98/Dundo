@@ -366,7 +366,16 @@ def _decode_and_pipeline(raw: bytes, ext: str = "") -> dict | JSONResponse:
     if (y if y.ndim == 1 else y).shape[-1] == 0:
         return _err(422, "empty_audio")
 
-    analysis = analyze_array(y, sr, duration_override=duration_full)
+    # analyze_array (the 7-signal quality report + waveform peaks) has its own
+    # internal cap that now tracks CLIP_CAP_S (full-song, up to 480 s) — but the
+    # librosa signal-processing it does doesn't need full-song input either, so
+    # feed it a MIR_ANALYSIS_MAX_S-capped slice directly rather than letting it
+    # process up to 8 minutes of audio. `duration_override` still carries the
+    # true full-file duration read from the header, so the reported track
+    # length stays honest even though the analysis window is capped.
+    mir_cap_n = int(config.MIR_ANALYSIS_MAX_S * sr)
+    y_for_mir = y[..., :mir_cap_n] if y.shape[-1] > mir_cap_n else y
+    analysis = analyze_array(y_for_mir, sr, duration_override=duration_full)
     mono = librosa.to_mono(y) if y.ndim > 1 else y
     cap_n = int(config.CLIP_CAP_S * sr)
     if mono.shape[-1] > cap_n:
@@ -377,11 +386,16 @@ def _decode_and_pipeline(raw: bytes, ext: str = "") -> dict | JSONResponse:
     report = compute_report(analysis["raw"])
 
     # ADR-0004: compute the four locked MIR criteria on the query audio.
-    # The same mono+capped buffer that drives MuQ-MuLan is the right input —
-    # we want the criteria computed against the same time region the embedding
-    # was computed over so the per-criterion comparisons are self-consistent.
+    # Tempo/key/chroma/timbre are stable well before full-song length, and
+    # full-song librosa analysis would add latency for no matching gain — so
+    # MIR runs on a MIR_ANALYSIS_MAX_S-capped slice of the (now full-song, up
+    # to CLIP_CAP_S) mono buffer, while MuQ-MuLan above still encodes the full
+    # buffer. This trades a little cross-signal self-consistency (MuQ "sees"
+    # more of the track than MIR does for songs longer than the MIR cap) for
+    # keeping /neighbors latency bounded; both windows start at the same t=0.
+    mir_mono = mono[:mir_cap_n] if mono.shape[-1] > mir_cap_n else mono
     try:
-        query_mir = mir_features.compute(mono, sr)
+        query_mir = mir_features.compute(mir_mono, sr)
     except Exception as exc:
         print(f"[api] mir_features.compute failed: {exc!r}")
         query_mir = None
