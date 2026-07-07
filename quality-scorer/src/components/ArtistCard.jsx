@@ -107,14 +107,12 @@ export default function ArtistCard({ artist, contextToken = null, queryUrl = nul
   const [tab, setTab] = useState('whySimilar')
   const [craftMode, setCraftMode] = useState('craftResonate') // 'craftResonate' | 'craftUnique'
   const mode = tab === 'whySimilar' ? 'whySimilar' : craftMode
-  // One narrative per mode, cached as { prose, snippet }. whySimilar loads on mount
-  // (drives the toggle's visibility); each coach mode loads lazily on selection and
-  // carries its own structured, copyable promptSnippet.
+  // One narrative per mode, cached as { prose }. whySimilar loads on mount
+  // (drives the toggle's visibility); each coach mode loads lazily on selection.
   const [narratives, setNarratives] = useState(() =>
-    artist.narrative ? { whySimilar: { prose: artist.narrative, snippet: null } } : {},
+    artist.narrative ? { whySimilar: { prose: artist.narrative } } : {},
   )
   const narrative = narratives[mode]?.prose || null
-  const snippet = narratives[mode]?.snippet || null
 
   // Lazy narrative (ADR-0005): hydrate the active mode from /narrative with the
   // winning track id + the signed contextToken. fetchNarrative retries the
@@ -131,13 +129,12 @@ export default function ArtistCard({ artist, contextToken = null, queryUrl = nul
           ...m,
           [mode]: {
             prose: ok ? res.prose : fallbackNarrative(artist, mode),
-            snippet: ok ? res.promptSnippet || null : null,
           },
         }))
       })
       .catch(() => {
         if (!cancelled)
-          setNarratives((m) => ({ ...m, [mode]: { prose: fallbackNarrative(artist, mode), snippet: null } }))
+          setNarratives((m) => ({ ...m, [mode]: { prose: fallbackNarrative(artist, mode) } }))
       })
     return () => {
       cancelled = true
