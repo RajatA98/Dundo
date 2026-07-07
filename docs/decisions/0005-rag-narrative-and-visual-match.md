@@ -4,6 +4,8 @@
 **Date**: 2026-06-16
 **Decider**: Rajat Arora (informed by the Gauntlet-AIDP [rag-cookbook](https://github.com/Gauntlet-AIDP/rag-cookbook) ladder + two rounds of independent Codex plan review)
 
+> **2026-07-06:** removed the Suno prompt snippet from the narrative contract — craft coaching is now prose-only (a subtly-wrong generated prompt is worse than none). `RESPONSE_SCHEMA_VERSION` bumped v3 → v4; the `promptSnippet`/`PromptSnippet` model and its schema field are gone, and the coach prompts no longer instruct the model to emit a Style/Lyrics/Workflow artifact.
+
 ---
 
 ## Context

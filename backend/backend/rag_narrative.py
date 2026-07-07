@@ -22,12 +22,12 @@ from pydantic import BaseModel, Field, ValidationError
 from . import config
 
 NarrativeMode = Literal["whySimilar", "creatorAdvice", "craftResonate", "craftUnique"]
-# The Suno-coach modes (get the KB injected + return a promptSnippet). whySimilar is
-# the discovery explanation; creatorAdvice is the legacy combined coach.
+# The Suno-coach modes (get the KB injected). whySimilar is the discovery
+# explanation; creatorAdvice is the legacy combined coach.
 COACH_MODES = frozenset({"creatorAdvice", "craftResonate", "craftUnique"})
 CriterionId = Literal["tempo", "key", "harmonic", "timbre"]
 
-RESPONSE_SCHEMA_VERSION = "v3"  # v3: creatorAdvice Suno coach — queryDescriptors + promptSnippet
+RESPONSE_SCHEMA_VERSION = "v4"  # v4: prose-only craft coaching — Suno promptSnippet dropped
 CRITERIA_ALGORITHM_VERSION = "adr-0004-v1"
 MAX_PROMPT_CHARS = 14000  # raised for the cached Suno-coach KB injected into creatorAdvice
 MAX_COMPLETION_TOKENS = 1000
@@ -120,16 +120,6 @@ class FactCitation(BaseModel):
     value: str
 
 
-class PromptSnippet(BaseModel):
-    # creatorAdvice (Suno coach) — a copyable, ready-to-paste Suno artifact. Empty for
-    # whySimilar. `style` = the Style-field line; `lyricsTags` = bracketed structure
-    # metatags for the Lyrics box; `workflowTip` = a Suno workflow move (Extend /
-    # Replace Section / Stems / Exclude Styles), not just a prompt string.
-    style: str = ""
-    lyricsTags: list[str] = Field(default_factory=list)
-    workflowTip: str = ""
-
-
 class NarrativeResponse(BaseModel):
     kind: Literal["narrative"] = "narrative"
     mode: NarrativeMode
@@ -138,8 +128,6 @@ class NarrativeResponse(BaseModel):
     # Optional in Pydantic (older mocks omit it) but the strict OpenAI schema marks
     # it required, so live calls always return it (possibly empty).
     factCitations: list[FactCitation] = Field(default_factory=list)
-    # creatorAdvice only — the structured copyable Suno snippet (empty for whySimilar).
-    promptSnippet: PromptSnippet = Field(default_factory=PromptSnippet)
 
 
 class LowConfidence(BaseModel):
@@ -176,7 +164,7 @@ _ARTIST_KNOWLEDGE_RULE = (
 def _coach_prompt(focus: str) -> str:
     """A focused Suno-coach system prompt. `focus` is the one specific job (resonate
     more vs. stand out). Shared rules: ground on the detected descriptors, hedge,
-    PLAIN-TEXT promptSnippet (no markdown), a full song structure, honest reminder."""
+    prose-only, honest reminder."""
     return (
         "You are Dundo's Suno coach — a warm music + Suno expert helping a creator improve "
         "the AI-generated track they uploaded. You do not hear the audio; you receive the "
@@ -184,15 +172,11 @@ def _coach_prompt(focus: str) -> str:
         "genre/mood tags) — INFERRED, not ground truth, so hedge ('your track reads as…', "
         "'Dundo detected…'). Use the SUNO COACHING KNOWLEDGE BASE below as your expertise. "
         f"{focus} "
-        "Keep the prose warm, plain, specific, and tied to the detected descriptors. Then "
-        "fill `promptSnippet` with ONE copyable Suno artifact: `style` (a Style-field line "
-        "of comma-separated descriptors), `lyricsTags` (a FULL song structure, 5-7 tags — "
-        "e.g. [Intro] [Verse] [Pre-Chorus] [Chorus] [Bridge] [Final Chorus] [Outro]), and "
-        "`workflowTip` (a full one-sentence instruction naming a Suno surface and what to "
-        "do). Use PLAIN TEXT in every field — NO markdown, NO asterisks. Set `citations`=[] "
-        "and `factCitations`=[]. End the prose with a brief honest reminder that Suno "
-        "prompts guide the output, they don't guarantee it. Output a single JSON object "
-        "matching the schema. No additional text, no markdown."
+        "Keep the prose warm, plain, specific, and tied to the detected descriptors. Use "
+        "PLAIN TEXT — NO markdown, NO asterisks. Set `citations`=[] and `factCitations`=[]. "
+        "End the prose with a brief honest reminder that Suno prompts guide the output, "
+        "they don't guarantee it. Output a single JSON object matching the schema. No "
+        "additional text, no markdown."
     )
 
 
@@ -228,13 +212,7 @@ SYSTEM_PROMPTS: dict[NarrativeMode, str] = {
         "Give exactly TWO moves in `prose`: (1) a 'make it resonate more' idea "
         "(emotional / hook / dynamics), and (2) a 'make it stand out' idea "
         "(distinctive / less-AI). Keep it warm, plain, and tied to the detected "
-        "descriptors. Then fill `promptSnippet` with ONE consolidated, copyable Suno "
-        "artifact: `style` (a Style-field line of comma-separated descriptors), "
-        "`lyricsTags` (a few bracketed structure metatags like [Verse], [Build-Up], "
-        "[Chorus]), and `workflowTip` (a FULL, specific one-sentence instruction naming a "
-        "Suno surface and what to do — e.g. 'Use Replace Section on the chorus to re-roll "
-        "just that part, then export Stems to swap the lead for a real take' — never a "
-        "single word). "
+        "descriptors. "
         "Set `citations` to [] and `factCitations` to [] — you cite no MIR criteria and "
         "assert no facts about any matched artist. End the prose with a brief honest "
         "reminder that Suno prompts guide the output, they don't guarantee it. "
@@ -287,11 +265,10 @@ Return JSON with exactly this shape:
   ],
   "factCitations": [
     {{"type": "location|tag|similarArtist", "value": "exact value drawn from artistKnowledge"}}
-  ],
-  "promptSnippet": {{"style": "Suno Style-field line (creatorAdvice only, else empty)", "lyricsTags": ["[Verse]", "[Chorus]"], "workflowTip": "a Suno workflow move"}}
+  ]
 }}
 
-`citations` carry numeric/criterion evidence; `factCitations` carry artist facts (one per artist fact you state in prose). Use [] for either when you cite nothing of that kind. IMPORTANT: if the context's `criteria` array is empty, `citations` MUST be [] — never invent a tempo/key/timestamp citation. Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made, and leave `promptSnippet` empty (style "", lyricsTags [], workflowTip ""). For creatorAdvice, follow the Suno-coach instructions: two moves in `prose` (resonate + stand out) grounded in `queryDescriptors`, and fill `promptSnippet` with the copyable Suno artifact.
+`citations` carry numeric/criterion evidence; `factCitations` carry artist facts (one per artist fact you state in prose). Use [] for either when you cite nothing of that kind. IMPORTANT: if the context's `criteria` array is empty, `citations` MUST be [] — never invent a tempo/key/timestamp citation. Use the supplied context only. For whySimilar, write one grounded paragraph about why the matched artist resonates with what the user made. For creatorAdvice, follow the Suno-coach instructions: two moves in `prose` (resonate + stand out) grounded in `queryDescriptors`.
 
 Context:
 {context_json}

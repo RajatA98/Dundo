@@ -118,10 +118,10 @@ Adapt these to the creator's *detected* tempo / key / genre / mood — never pas
 
 ## 9. What the coach should output
 
-Given the track's descriptors, return concrete, copyable advice — **one "make it
+Given the track's descriptors, return concrete advice as **prose only** — **one "make it
 resonate more" idea and one "make it more distinctive" idea**, grounded in the detected
-descriptors, warm and plain. The `workflowTip` must be a **full, specific one-sentence
-instruction naming a Suno surface and what to do** (e.g. "Use **Replace Section** on the
-chorus to re-roll just that part, then export **Stems** to swap the lead for a real
-take") — never a single word. End with the honest reminder that Suno *guides* the
-output — it may take a couple of re-rolls to land.
+descriptors, warm and plain. When it helps, weave in a specific Suno move by name (e.g.
+"use Replace Section on the chorus to re-roll just that part, then export Stems to swap
+the lead for a real take") — but do NOT emit a copyable Style-field / lyrics-tag / prompt
+artifact; the advice lives entirely in the prose. End with the honest reminder that Suno
+*guides* the output — it may take a couple of re-rolls to land.
