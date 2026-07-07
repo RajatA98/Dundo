@@ -1,5 +1,5 @@
 {
-  "n_cases": 17,
+  "n_cases": 19,
   "kind_agreement_rate": 1.0,
   "reason_agreement_rate": 1.0,
   "baseline_gates": {
@@ -9,5 +9,5 @@
     "malformed_rejection": 1.0,
     "openai_error_handling": 1.0
   },
-  "generated_at": "2026-07-07T01:27:37.284420+00:00"
+  "generated_at": "2026-07-07T03:20:26.455336+00:00"
 }

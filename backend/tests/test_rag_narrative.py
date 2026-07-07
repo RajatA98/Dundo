@@ -553,3 +553,116 @@ def test_cache_key_changes_when_prompt_template_changes() -> None:
         )
 
     assert before != after
+
+
+# --- prose-numeric backstop (whySimilar, MIR-less matches) ---------------------
+# When a whySimilar match has NO validated criteria there is no tempo/key to back a
+# numeric claim, so any BPM/key stated in the FREE PROSE is a fabrication. The
+# validation-layer backstop rejects it (-> unavailable, prose-ungrounded-metric).
+# It must fire ONLY for whySimilar + empty criteria; craft modes legitimately state
+# the UPLOAD's own detected "129 BPM in A minor", so they must be untouched.
+
+def test_whysimilar_ungrounded_bpm_prose_rejected() -> None:
+    ctx = _context(criteria=[])  # rawCosine 0.8812 -> gate passes; no MIR to back a BPM
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "You both share a bright, unhurried feel — the two sit around 129 BPM, "
+        "an easy pop-jazz warmth that lands most in the matched section.",
+        "citations": [],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload):
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="m", catalog_sha="c",
+        )
+    assert isinstance(result, NarrativeUnavailable)
+    assert result.reason == "prose-ungrounded-metric"
+
+
+def test_whysimilar_ungrounded_key_prose_rejected() -> None:
+    ctx = _context(criteria=[])
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Their sound shares your center — both sit in A minor, a hazy, "
+        "melodic pull that resonates most around the matched moment.",
+        "citations": [],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload):
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="m", catalog_sha="c",
+        )
+    assert isinstance(result, NarrativeUnavailable)
+    assert result.reason == "prose-ungrounded-metric"
+
+
+def test_whysimilar_prose_without_metric_passes() -> None:
+    # Control: the SAME shape of prose minus the numeric metric is a kind narrative.
+    ctx = _context(criteria=[])
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "You both share a bright, unhurried feel — an easy pop-jazz warmth "
+        "that lands most in the matched section.",
+        "citations": [],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="m", catalog_sha="c",
+        )
+    assert isinstance(result, NarrativeResponse)
+    call.assert_called_once()
+
+
+def test_craft_mode_bpm_prose_not_rejected() -> None:
+    # Control: a craft mode legitimately names the UPLOAD's own detected tempo/key.
+    # Backstop must NOT touch craft modes even with empty criteria.
+    ctx = _context(criteria=[])
+    ctx.queryDescriptors = {"tempoBpm": 129, "key": "A", "mode": "minor", "genres": ["pop"]}
+    payload = {
+        "kind": "narrative",
+        "mode": "craftResonate",
+        "prose": "Your track reads as a warm pop cut at 129 BPM in A minor. Thin the "
+        "verse to a soft Rhodes so the chorus lifts. Suno prompts guide the output, "
+        "so it may take a couple of re-rolls to land.",
+        "citations": [],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(
+            ctx, "craftResonate", model_sha="m", catalog_sha="c",
+        )
+    assert isinstance(result, NarrativeResponse)
+    assert result.mode == "craftResonate"
+    call.assert_called_once()
+
+
+def test_whysimilar_bpm_with_criteria_not_rejected() -> None:
+    # When criteria ARE present, tempo in prose is citation-backed and legitimate.
+    ctx = _context()  # default helper carries tempo/key/harmonic criteria
+    payload = _valid_payload()
+    payload["prose"] = "The two share the same tempo around 100 BPM and a C-major center."
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload) as call:
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="m", catalog_sha="c",
+        )
+    assert isinstance(result, NarrativeResponse)
+    call.assert_called_once()
+
+
+def test_prose_states_ungrounded_metric_unit() -> None:
+    fn = rag_narrative._prose_states_ungrounded_metric
+    # positives
+    assert fn("sits around 129 BPM")
+    assert fn("both at 129bpm")
+    assert fn("roughly 90 beats per minute")
+    assert fn("both sit in A minor")
+    assert fn("in C# major")
+    assert fn("in Bb minor")
+    assert fn("the key of D minor")
+    # negatives — ordinary English / non-key uses must NOT trip it
+    assert not fn("they share a warm, unhurried feel")
+    assert not fn("this artist plays a minor role in the scene")
+    assert not fn("a major influence on the local sound")
+    assert not fn("the key to their sound is restraint")
+    assert not fn("based in Paris, France, folding jazz into pop")
+    assert not fn("")

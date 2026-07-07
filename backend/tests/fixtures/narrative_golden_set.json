@@ -995,6 +995,44 @@
       },
       "expected_kind": "narrative",
       "expected_reason": null
+    },
+    {
+      "name": "prose_ungrounded_bpm_on_mirless_whysimilar",
+      "category": "prose_ungrounded_metric",
+      "description": "Hard backstop: a MIR-less whySimilar match (criteria=[]) whose FREE PROSE states a tempo (129 BPM) has no validated criterion to back it, so the number is a fabrication. The prose-numeric backstop rejects it as prose-ungrounded-metric (never rendered). Fires ONLY for whySimilar + empty criteria; craft modes and criteria-present whySimilar are untouched.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee2",
+        "trackId": "tier2:jamendo:1442201",
+        "title": "Champ In Blue",
+        "artist": "Dazie Mae",
+        "queryWindow": [
+          80.0,
+          90.0
+        ],
+        "matchWindow": [
+          110.0,
+          120.0
+        ],
+        "rawCosine": 0.742,
+        "criteria": [],
+        "evidenceShared": [
+          {
+            "kind": "genre",
+            "label": "pop",
+            "confidence": 0.603
+          }
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "You both share a bright, unhurried feel — the two sit around 129 BPM, an easy pop-jazz warmth that lands most in the matched section.",
+        "citations": []
+      },
+      "expected_kind": "unavailable",
+      "expected_reason": "prose-ungrounded-metric"
     }
   ]
 }

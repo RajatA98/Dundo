@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import threading
 import time
 from collections import OrderedDict
@@ -465,6 +466,23 @@ def generate_narrative(
             success=False,
         )
 
+    # Hard backstop for MIR-less whySimilar matches: with no validated criteria there
+    # is nothing to back a tempo/key claim, so a BPM/key stated in the free prose is a
+    # fabrication — reject rather than render it. Gated strictly on whySimilar + empty
+    # criteria: craft modes legitimately state the UPLOAD's own detected tempo/key, and
+    # a criteria-present whySimilar has a validated citation to back the number. Not
+    # cached (this is already the non-cached rejection path).
+    if (
+        mode == "whySimilar"
+        and not context.criteria
+        and _prose_states_ungrounded_metric(narrative.prose)
+    ):
+        return finish(
+            NarrativeUnavailable(reason="prose-ungrounded-metric"),
+            gate_result="called",
+            success=False,
+        )
+
     _cache_put(key, narrative)
     return finish(narrative, gate_result="called", success=True)
 
@@ -720,6 +738,39 @@ def _timestamp_is_grounded(citation: StructuredCitation, context: NarrativeConte
         return False
     window = context.queryWindow if citation.side == "query" else context.matchWindow
     return start >= window[0] - 0.5 and end <= window[1] + 0.5
+
+
+# Prose-numeric backstop (whySimilar, MIR-less matches). When `criteria` is empty
+# there is NO validated tempo/key to back a numeric acoustic claim, so any BPM/key
+# asserted in the FREE PROSE is a fabrication (the prompt forbids it, but a hard
+# backstop guarantees it can never render). These regexes are deliberately narrow:
+#   - tempo: a 2-3 digit number anchored to BPM / "beats per minute".
+#   - key ("in" form): REQUIRES major/minor after an UPPERCASE note letter, so
+#     ordinary English "in a minor role" / "in A hurry" cannot trip it.
+#   - key ("key of" form): "key of <Note>" — the phrase itself is a key assertion.
+# A stray English "key" word alone does NOT match.
+_BPM_RE = re.compile(r"\b\d{2,3}\s?(?:bpm|beats per minute)\b", re.IGNORECASE)
+_KEY_IN_RE = re.compile(
+    r"\bin\s+[A-G](?:\s?#|\s?b|\s?sharp|\s?flat)?\s+(?:[Mm]ajor|[Mm]inor)\b"
+)
+_KEY_OF_RE = re.compile(
+    r"\bkey of\s+[A-G](?:\s?#|\s?b|\s?sharp|\s?flat)?\b", re.IGNORECASE
+)
+
+
+def _prose_states_ungrounded_metric(prose: str) -> bool:
+    """True if the prose asserts a tempo (BPM) or a musical key.
+
+    Used ONLY as a whySimilar backstop for MIR-less matches (empty criteria),
+    where no validated tempo/key exists to back such a claim. Kept narrow
+    (BPM-anchored tempo, uppercase note letter + required major/minor) to keep
+    false positives on ordinary English near zero.
+    """
+    if not prose:
+        return False
+    return bool(
+        _BPM_RE.search(prose) or _KEY_IN_RE.search(prose) or _KEY_OF_RE.search(prose)
+    )
 
 
 def _numeric_close(actual: Any, expected: Any, *, tolerance: float) -> bool:
