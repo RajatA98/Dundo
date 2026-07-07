@@ -6,6 +6,8 @@
 
 > **2026-07-06:** removed the Suno prompt snippet from the narrative contract — craft coaching is now prose-only (a subtly-wrong generated prompt is worse than none). `RESPONSE_SCHEMA_VERSION` bumped v3 → v4; the `promptSnippet`/`PromptSnippet` model and its schema field are gone, and the coach prompts no longer instruct the model to emit a Style/Lyrics/Workflow artifact.
 
+> **2026-07-06:** richer, descriptor-specific craft coaching prose. With the snippet gone the coach's full budget goes to prose, so `_coach_prompt` (+ the `craftResonate`/`craftUnique` focus strings) now hard-require the copy to open on the track's *detected* descriptors (real tempo/key/mode/genre), commit to exactly ONE concrete move naming a real instrument/production word/Suno surface (never a placeholder like "an unexpected instrument"), stay 2-3 warm sentences, and end on the honest "prompts guide, don't guarantee" reminder. Verified live against gpt-4o-mini on the "Champ In Blue" token (129 BPM / A minor / pop-jazz). Prompt-only change — `run_rag_eval` gates unaffected (mocked responses), all 5 baselines at 1.0.
+
 ---
 
 ## Context
