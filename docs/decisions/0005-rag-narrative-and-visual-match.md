@@ -81,6 +81,8 @@ Every LLM response is parsed into a Pydantic `NarrativeResponse` with `citations
 Any failure → `NarrativeUnavailable(reason="citation-hallucinated")`. **No retry.** The hallucinated response is discarded rather than rendered.
 
 > 2026-07-06: hardened citation validation — a malformed/empty `timestampRange` is rejected (`citation-hallucinated`), not thrown; regression case added (was a deterministic 500 on MIR-less matches).
+>
+> 2026-07-06: `whySimilar` reliably narrates MIR-less matches (grounds on tags + artist facts + the matched moment; emits `citations: []` when criteria are absent). The empty-criteria case is the common match type (most of the catalog has no MIR features), so the prompt now treats it as a first-class, well-supported path rather than a fallback: it leads with the artist + location, connects the shared genre/mood descriptors to the upload, may reference where it resonates most via `matchWindow`, and does not read `queryDescriptors` tempo/key as shared evidence (there is no validated acoustic comparison without criteria). The empty-criteria→`citations: []` rule is now enforced at the system-prompt level (not just the user template) so the Task-1 guard is a safety net, not the primary control. Golden happy-path case `happy_path_whysimilar_mirless_evidence` locks this in.
 
 ### Context-completeness gate (the Codex round-2 Q2 fix)
 

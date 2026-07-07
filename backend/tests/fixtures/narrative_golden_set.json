@@ -6,7 +6,7 @@
     {
       "name": "happy_path_whysimilar",
       "category": "happy_path",
-      "description": "Strong evidence + valid LLM citations \u2192 narrative kind.",
+      "description": "Strong evidence + valid LLM citations → narrative kind.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -186,7 +186,7 @@
     {
       "name": "happy_path_creatoradvice",
       "category": "happy_path",
-      "description": "Same context, different mode \u2192 creator advice narrative.",
+      "description": "Same context, different mode → creator advice narrative.",
       "mode": "creatorAdvice",
       "context": {
         "queryFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -312,7 +312,7 @@
       "mocked_llm_response": {
         "kind": "narrative",
         "mode": "whySimilar",
-        "prose": "Cosine similarity is strong despite weak per-criterion agreement \u2014 likely a more abstract embedding-level match in mood or instrumentation.",
+        "prose": "Cosine similarity is strong despite weak per-criterion agreement — likely a more abstract embedding-level match in mood or instrumentation.",
         "citations": [
           {
             "trackId": "tier2:jamendo:43419",
@@ -340,7 +340,7 @@
     {
       "name": "low_context_missing_criteria",
       "category": "low_context",
-      "description": "Empty criteria list \u2192 gate short-circuits before LLM call.",
+      "description": "Empty criteria list → gate short-circuits before LLM call.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -366,7 +366,7 @@
     {
       "name": "low_context_missing_title",
       "category": "low_context",
-      "description": "Title is empty \u2192 gate short-circuits as missing-metadata.",
+      "description": "Title is empty → gate short-circuits as missing-metadata.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
@@ -400,7 +400,7 @@
     {
       "name": "low_context_weak_evidence",
       "category": "low_context",
-      "description": "All criteria agreement below 0.55 AND raw cosine below 0.75 \u2192 weak-evidence.",
+      "description": "All criteria agreement below 0.55 AND raw cosine below 0.75 → weak-evidence.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
@@ -441,7 +441,7 @@
     {
       "name": "hallucinated_unknown_criterion",
       "category": "hallucinated_citation",
-      "description": "LLM cites a criterion not present in the context \u2192 validation rejects.",
+      "description": "LLM cites a criterion not present in the context → validation rejects.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
@@ -498,7 +498,7 @@
     {
       "name": "hallucinated_wrong_trackid",
       "category": "hallucinated_citation",
-      "description": "LLM cites a different trackId than the one in context \u2192 rejected.",
+      "description": "LLM cites a different trackId than the one in context → rejected.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
@@ -555,7 +555,7 @@
     {
       "name": "hallucinated_wrong_tempo_value",
       "category": "hallucinated_citation",
-      "description": "Cited tempo value differs from context by > 2 BPM \u2192 rejected.",
+      "description": "Cited tempo value differs from context by > 2 BPM → rejected.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
@@ -612,7 +612,7 @@
     {
       "name": "hallucinated_timestamp_outside_window",
       "category": "hallucinated_citation",
-      "description": "Cited timestampRange is outside the side-appropriate window \u2192 rejected.",
+      "description": "Cited timestampRange is outside the side-appropriate window → rejected.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "4444444444444444444444444444444444444444444444444444444444444444",
@@ -669,7 +669,7 @@
     {
       "name": "malformed_schema",
       "category": "malformed_output",
-      "description": "LLM emits JSON that doesn't match NarrativeResponse schema \u2192 rejected.",
+      "description": "LLM emits JSON that doesn't match NarrativeResponse schema → rejected.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "5555555555555555555555555555555555555555555555555555555555555555",
@@ -706,7 +706,7 @@
     {
       "name": "openai_returns_none",
       "category": "openai_error",
-      "description": "SDK helper returns None on transient failure \u2192 unavailable openai-error.",
+      "description": "SDK helper returns None on transient failure → unavailable openai-error.",
       "mode": "whySimilar",
       "context": {
         "queryFingerprint": "6666666666666666666666666666666666666666666666666666666666666666",
@@ -931,6 +931,70 @@
       },
       "expected_kind": "unavailable",
       "expected_reason": "citation-hallucinated"
+    },
+    {
+      "name": "happy_path_whysimilar_mirless_evidence",
+      "category": "happy_path",
+      "description": "The common MIR-less whySimilar match: criteria=[] but real shared genre descriptors + artistKnowledge (location, genres). The model grounds prose on tags + artist facts + the matched moment and emits citations=[] with a grounded location factCitation -> narrative. Locks in that the empty-criteria happy path is a valid narrative, not a fallback.",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd1",
+        "trackId": "tier2:jamendo:1442201",
+        "title": "Champ In Blue",
+        "artist": "Dazie Mae",
+        "queryWindow": [
+          80.0,
+          90.0
+        ],
+        "matchWindow": [
+          110.0,
+          120.0
+        ],
+        "rawCosine": 0.742,
+        "criteria": [],
+        "evidenceShared": [
+          {
+            "kind": "genre",
+            "label": "pop",
+            "confidence": 0.603
+          },
+          {
+            "kind": "genre",
+            "label": "jazz",
+            "confidence": 0.476
+          }
+        ],
+        "artistKnowledge": {
+          "genres": [
+            "jazz",
+            "pop"
+          ],
+          "location": "Paris, France",
+          "locationAliases": [
+            "fra",
+            "france",
+            "french",
+            "paris",
+            "paris, fra",
+            "paris, france"
+          ]
+        },
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Dazie Mae, based in Paris, France, folds jazz warmth into pop songcraft — the same easy blend running through what you made. It clicks most around the 1:55 mark, where the two share that unhurried, melodic pull.",
+        "citations": [],
+        "factCitations": [
+          {
+            "type": "location",
+            "value": "Paris, France"
+          }
+        ]
+      },
+      "expected_kind": "narrative",
+      "expected_reason": null
     }
   ]
 }
