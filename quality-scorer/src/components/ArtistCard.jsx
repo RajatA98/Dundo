@@ -49,51 +49,6 @@ function SnippetPlayer({ url, start, end, label }) {
   )
 }
 
-// Strip stray markdown (the LLM sometimes copies **bold** from the KB into a field).
-const noMd = (s) => String(s || '').replace(/\*\*/g, '').replace(/`/g, '').trim()
-// Suno coach output — a copyable Style line + Lyrics-box metatags + a workflow tip.
-function PromptSnippet({ snippet }) {
-  const [copied, setCopied] = useState(false)
-  const style = noMd(snippet.style)
-  const tags = (snippet.lyricsTags || []).map(noMd).filter(Boolean).join(' ')
-  const workflowTip = noMd(snippet.workflowTip)
-  const copyText = [
-    style && `Style: ${style}`,
-    tags && `Lyrics: ${tags}`,
-    workflowTip && `Workflow: ${workflowTip}`,
-  ].filter(Boolean).join('\n')
-  const copy = () => {
-    navigator.clipboard?.writeText(copyText).then(
-      () => { setCopied(true); setTimeout(() => setCopied(false), 1600) },
-      () => {},
-    )
-  }
-  const label = (t) => (
-    <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-faint)', marginBottom: 4 }}>{t}</div>
-  )
-  const code = (t) => (
-    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.5, color: 'var(--color-ink-soft)', wordBreak: 'break-word' }}>{t}</div>
-  )
-  return (
-    <div style={{ marginTop: 14, border: '1px solid var(--color-line)', borderRadius: 12, background: 'var(--color-wash)', padding: '14px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-teal)' }}>Try this in Suno</span>
-        <button
-          onClick={copy}
-          style={{ cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 999, border: '1px solid var(--color-teal)', background: copied ? 'var(--color-teal)' : 'transparent', color: copied ? '#fff' : 'var(--color-teal)', transition: 'all 0.15s' }}
-        >
-          {copied ? 'Copied ✓' : 'Copy'}
-        </button>
-      </div>
-      {style && <div style={{ marginBottom: 10 }}>{label('Style field')}{code(style)}</div>}
-      {tags && <div style={{ marginBottom: workflowTip ? 10 : 0 }}>{label('Lyrics box')}{code(tags)}</div>}
-      {workflowTip && (
-        <div>{label('Workflow')}<div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--color-ink-soft)' }}>{workflowTip}</div></div>
-      )}
-    </div>
-  )
-}
-
 // Deterministic narrative used ONLY when the LLM one is unavailable after retries,
 // so every tab always carries an honest explanation. Prefers the real shared
 // descriptors; otherwise uses the acoustic-resemblance framing the backend itself
@@ -405,9 +360,6 @@ export default function ArtistCard({ artist, contextToken = null, queryUrl = nul
               <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 17, lineHeight: 1.62, color: 'var(--color-ink-soft)', margin: '12px 0 0', maxWidth: '64ch' }}>
                 {narrative || 'Reading the match…'}
               </p>
-              {tab === 'craft' && snippet && (snippet.style || (snippet.lyricsTags || []).length > 0) && (
-                <PromptSnippet snippet={snippet} />
-              )}
             </div>
           )}
         </div>
