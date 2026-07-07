@@ -238,6 +238,36 @@ def test_wrong_trackid_returns_unavailable() -> None:
     assert result.reason == "citation-hallucinated"
 
 
+def test_empty_timestamp_range_returns_unavailable_not_500() -> None:
+    # Root cause of the deterministic whySimilar 500: MIR-less matches (criteria=[]) get a
+    # citation with an empty timestampRange ([]). The validation layer must reject it as
+    # citation-hallucinated (HTTP 200 unavailable), never let `start, end = []` throw a
+    # ValueError that the endpoint turns into a 500.
+    ctx = _context(criteria=[])  # helper rawCosine=0.8812 -> strong acoustic match, gate passes
+    payload = {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Your tracks share a similar acoustic character in the matched section — "
+        "a resonance rather than any legal claim.",
+        "citations": [
+            {
+                "trackId": "tier2:jamendo:380907765",
+                "side": "query",
+                "timestampRange": [],
+                "criterionIds": [],
+                "citedValues": [],
+            }
+        ],
+    }
+    with patch("backend.rag_narrative._call_openai_json", return_value=payload):
+        result = rag_narrative.generate_narrative(
+            ctx, "whySimilar", model_sha="model-sha", catalog_sha="catalog-sha",
+        )
+
+    assert isinstance(result, NarrativeUnavailable)
+    assert result.reason == "citation-hallucinated"
+
+
 def test_low_context_short_circuits_llm() -> None:
     ctx = _context(criteria=[])
     ctx.rawCosine = 0.5  # genuinely weak: no criteria, no evidence, low cosine -> gated

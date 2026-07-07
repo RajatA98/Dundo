@@ -76,6 +76,8 @@ Every LLM response is parsed into a Pydantic `NarrativeResponse` with `citations
 
 Any failure → `NarrativeUnavailable(reason="citation-hallucinated")`. **No retry.** The hallucinated response is discarded rather than rendered.
 
+> 2026-07-06: hardened citation validation — a malformed/empty `timestampRange` is rejected (`citation-hallucinated`), not thrown; regression case added (was a deterministic 500 on MIR-less matches).
+
 ### Context-completeness gate (the Codex round-2 Q2 fix)
 
 Before any OpenAI call, return `LowConfidence` if context completeness fails:

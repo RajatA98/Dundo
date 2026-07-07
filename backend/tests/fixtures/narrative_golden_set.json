@@ -885,6 +885,52 @@
       },
       "expected_kind": "unavailable",
       "expected_reason": "citation-hallucinated"
+    },
+    {
+      "name": "empty_timestamp_range_on_mirless_match",
+      "category": "hallucinated_citation",
+      "description": "Regression (was a deterministic whySimilar 500): a MIR-less match (criteria=[]) with a strong cosine gets a citation whose timestampRange is []. The length guard in _timestamp_is_grounded rejects it as citation-hallucinated instead of throwing ValueError('not enough values to unpack').",
+      "mode": "whySimilar",
+      "context": {
+        "queryFingerprint": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee1",
+        "trackId": "tier2:jamendo:380907765",
+        "title": "Small Hours",
+        "artist": "Maya Lev",
+        "queryWindow": [
+          20.0,
+          30.0
+        ],
+        "matchWindow": [
+          10.0,
+          20.0
+        ],
+        "rawCosine": 0.8812,
+        "criteria": [],
+        "evidenceShared": [
+          {
+            "kind": "genre",
+            "label": "dream pop",
+            "confidence": 0.6
+          }
+        ],
+        "acrcloudCoverSongId": null
+      },
+      "mocked_llm_response": {
+        "kind": "narrative",
+        "mode": "whySimilar",
+        "prose": "Your tracks share a hazy, atmospheric character in the matched section — a resonance rather than any legal claim.",
+        "citations": [
+          {
+            "trackId": "tier2:jamendo:380907765",
+            "side": "query",
+            "timestampRange": [],
+            "criterionIds": [],
+            "citedValues": []
+          }
+        ]
+      },
+      "expected_kind": "unavailable",
+      "expected_reason": "citation-hallucinated"
     }
   ]
 }

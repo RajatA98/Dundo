@@ -608,37 +608,43 @@ def _citations_are_grounded(citations: list[StructuredCitation], context: Narrat
         # — legitimately carry no structured citations.
         return not context.criteria
 
-    for citation in citations:
-        if citation.trackId != context.trackId:
-            return False
-        if not all(criterion_id in criteria for criterion_id in citation.criterionIds):
-            return False
-        if not _timestamp_is_grounded(citation, context):
-            return False
-        for cited in citation.citedValues:
-            key, cited_value = cited.name, cited.value
-            if key == "rawCosine":
-                if not _numeric_close(cited_value, context.rawCosine, tolerance=0.01):
-                    return False
-                continue
-            if "." not in key:
+    # Belt-and-suspenders: an unexpectedly-shaped citation must be rejected as not-grounded,
+    # never raise (a raised exception here becomes an HTTP 500). Each per-citation check is
+    # already defensive; the wrapper guarantees no shape slips through as a throw.
+    try:
+        for citation in citations:
+            if citation.trackId != context.trackId:
                 return False
-            criterion_id, side = key.split(".", 1)
-            if criterion_id not in criteria or side not in {"queryValue", "matchValue"}:
+            if not all(criterion_id in criteria for criterion_id in citation.criterionIds):
                 return False
-            criterion = criteria[criterion_id]
-            expected = getattr(criterion, side)
-            if criterion_id == "tempo":
-                if not _numeric_close(cited_value, expected, tolerance=2.0):
-                    return False
-            elif criterion_id == "key":
-                if str(cited_value) != str(expected):
-                    return False
-            elif criterion_id in {"harmonic", "timbre"}:
-                if not isinstance(expected, dict):
-                    return False
-            else:
+            if not _timestamp_is_grounded(citation, context):
                 return False
+            for cited in citation.citedValues:
+                key, cited_value = cited.name, cited.value
+                if key == "rawCosine":
+                    if not _numeric_close(cited_value, context.rawCosine, tolerance=0.01):
+                        return False
+                    continue
+                if "." not in key:
+                    return False
+                criterion_id, side = key.split(".", 1)
+                if criterion_id not in criteria or side not in {"queryValue", "matchValue"}:
+                    return False
+                criterion = criteria[criterion_id]
+                expected = getattr(criterion, side)
+                if criterion_id == "tempo":
+                    if not _numeric_close(cited_value, expected, tolerance=2.0):
+                        return False
+                elif criterion_id == "key":
+                    if str(cited_value) != str(expected):
+                        return False
+                elif criterion_id in {"harmonic", "timbre"}:
+                    if not isinstance(expected, dict):
+                        return False
+                else:
+                    return False
+    except (ValueError, TypeError, AttributeError):
+        return False
     return True
 
 
@@ -686,6 +692,12 @@ def _fact_citations_are_grounded(
 
 
 def _timestamp_is_grounded(citation: StructuredCitation, context: NarrativeContext) -> bool:
+    # The schema is `timestampRange: list[float]` (any length — it MUST stay a list, not a
+    # tuple, or OpenAI strict mode rejects the minItems/maxItems a tuple emits; see the
+    # comment at the StructuredCitation model). So a malformed/empty range is caught here at
+    # the validation layer, never unpacked: reject as not-grounded rather than throw.
+    if len(citation.timestampRange) != 2:
+        return False
     start, end = citation.timestampRange
     if end <= start:
         return False
