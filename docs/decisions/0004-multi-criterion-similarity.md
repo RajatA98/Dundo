@@ -193,6 +193,40 @@ A follow-up could add a small criteria-side eval: for each self-retrieval test, 
 
 ---
 
+## Addendum (2026-07-08 pt.2): more accurate key detection (harmonic-CQT + profile ensemble)
+
+The honesty fix below (pt.1) surfaced a deeper issue: the detector itself was
+inaccurate on the mode/relative axis. A deep-research pass (report:
+`~/Documents/Musical_Key_Detection_Research_20260708/`) plus an on-file A/B
+established two root causes and a fix, all zero-new-dependency (librosa+numpy):
+
+1. **Wrong chroma feature.** `chroma_cens` is a *matching* feature — its
+   amplitude quantization discards the pitch-class magnitude that key profiles
+   correlate against (librosa docs; Essentia HPCP rationale). Key detection now
+   uses a **CQT chroma computed on the harmonic (HPSS) signal with tuning
+   correction** — `librosa.effects.harmonic` → `chroma_cqt(tuning=…)`. Removing
+   percussion/transients cleaned the profile enough that *all* profiles flipped
+   the test track from C minor to the correct E♭ major. `chroma_mean` (the
+   cens feature) is UNCHANGED and still feeds the harmonic-similarity criterion,
+   so the catalog stays consistent — only key detection got the richer chroma.
+2. **Wrong profile.** Raw Krumhansl-Schmuckler is the weakest published profile
+   (dominant bias). Key detection now **ensembles Temperley (best on major,
+   but over-predicts the relative major) with Albrecht-Shanahan (best on the
+   minor mode)**, averaging their per-key Pearson correlations so the two mode
+   biases cancel. On the test track the ensemble gives E♭ major 0.86, relative
+   C minor 0.68 (margin 0.185), with C minor correctly the runner-up.
+
+Evidence context: mode/relative discrimination is the field's dominant error
+class — MIREX awards relative errors 0.3 partial credit, and even supervised
+CNN SOTA caps ~79% mode accuracy (Korzeniowski & Widmer 2017/2018; S-KEY 2025).
+So the ensemble narrows, but cannot eliminate, the ambiguity — the pt.1 flag
+(below) stays as the graceful fallback. DL (madmom CNN) was rejected: ~4
+weighted points over a tuned template, not worth the GPU/model weight.
+Latency: +~2 s on the 60 s MIR slice (HPSS), immaterial next to the ~28 s MuQ
+encode. This changes the query-side winning key/mode; catalog MIR is largely
+absent so `compare_keys` impact is negligible, and more accurate keys are the
+goal.
+
 ## Addendum (2026-07-08): relative-key honesty in the key/mode readout
 
 The mean-chroma Krumhansl-Schmuckler key detector reports the single best-correlating

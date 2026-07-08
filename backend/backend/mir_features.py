@@ -25,11 +25,11 @@ from dataclasses import asdict, dataclass
 import numpy as np
 
 
-# Krumhansl-Schmuckler key profiles — 12 major + 12 minor, each shifted to
-# a different tonic. Source: Krumhansl 1990, "Cognitive Foundations of
-# Musical Pitch." These are the standard tonal-strength weights for each
-# pitch class within a given key; correlating a measured chroma mean
-# against each rotation finds the most-likely key.
+# Krumhansl-Schmuckler key profiles — 12 major + 12 minor. Source: Krumhansl
+# 1990, "Cognitive Foundations of Musical Pitch." Retained as the historical
+# baseline / provenance; key detection now uses the Temperley+Albrecht-Shanahan
+# ensemble below (raw K-S was the weakest published profile — it biases toward
+# the dominant and is poor at the major/minor axis). See ADR-0004 addendum.
 _KS_MAJOR = np.array(
     [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88],
     dtype=np.float32,
@@ -38,6 +38,57 @@ _KS_MINOR = np.array(
     [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17],
     dtype=np.float32,
 )
+
+# Temperley (Kostka-Payne) key profiles — the weights music21 ships as
+# `TemperleyKostkaPayne`. They separate major vs minor (the relative-key axis)
+# better than raw Krumhansl-Schmuckler, especially on non-classical material.
+# Used for key/mode detection below; the deep-research addendum in ADR-0004
+# records the corpus evidence and the on-file A/B that motivated the swap.
+_TEMPERLEY_MAJOR = np.array(
+    [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0],
+    dtype=np.float32,
+)
+_TEMPERLEY_MINOR = np.array(
+    [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0],
+    dtype=np.float32,
+)
+
+# Albrecht-Shanahan (2013) corpus-trained profiles. Reported as the most
+# accurate single profile overall (~87%) and, crucially, the strongest on the
+# MINOR mode — the exact weakness Temperley has (Temperley over-predicts the
+# relative major in minor keys). We ensemble the two so their mode biases
+# cancel: Temperley anchors major, Albrecht-Shanahan anchors minor.
+_ALBRECHT_MAJOR = np.array(
+    [0.238, 0.006, 0.111, 0.006, 0.137, 0.094, 0.016, 0.214, 0.009, 0.080, 0.008, 0.081],
+    dtype=np.float32,
+)
+_ALBRECHT_MINOR = np.array(
+    [0.220, 0.006, 0.104, 0.123, 0.019, 0.103, 0.012, 0.214, 0.062, 0.022, 0.061, 0.052],
+    dtype=np.float32,
+)
+
+# Ensembled key-profile bank: (major, minor) pairs whose per-key correlations
+# are averaged. Combining corpus-trained profiles reduces any single profile's
+# mode bias — see ADR-0004 addendum + the deep-research report (2026-07-08).
+_KEY_PROFILE_ENSEMBLE = (
+    (_TEMPERLEY_MAJOR, _TEMPERLEY_MINOR),
+    (_ALBRECHT_MAJOR, _ALBRECHT_MINOR),
+)
+
+
+def _ensemble_key_corr(cm_centered: np.ndarray, cm_denom: float, shift: int, mode: str) -> float:
+    """Mean Pearson correlation of a centered chroma against every profile in the
+    ensemble, for one candidate key (tonic `shift`, `mode`)."""
+    slot = 0 if mode == "major" else 1
+    total = 0.0
+    for pair in _KEY_PROFILE_ENSEMBLE:
+        prof = np.roll(pair[slot], shift).astype(np.float64)
+        prof_centered = prof - prof.mean()
+        prof_denom = float(np.sqrt((prof_centered ** 2).sum())) or 1.0
+        total += float((cm_centered * prof_centered).sum() / (cm_denom * prof_denom))
+    return total / len(_KEY_PROFILE_ENSEMBLE)
+
+
 _PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 # Display spelling by key signature — flats/sharps chosen the way a musician
@@ -148,21 +199,33 @@ def compute(wav_mono: np.ndarray, sr: int) -> MirFeatures:
     chroma_mean = chroma_mean_raw / s if s > 0 else chroma_mean_raw
 
     # --- key + mode + confidence ---------------------------------------
-    # Krumhansl-Schmuckler: correlate chroma mean against 12 rotations of
-    # the major profile and 12 of the minor profile, pick the maximum.
-    cm = chroma_mean.astype(np.float64)
-    cm_centered = cm - cm.mean()
+    # Key detection uses a DEDICATED chroma, not the chroma_cens mean above:
+    # CENS is a *matching* feature whose amplitude quantization discards the
+    # pitch-class magnitude that key profiles correlate against. Instead we
+    # compute a CQT chroma on the HARMONIC (percussion-removed) signal with
+    # tuning correction — this markedly improves relative major/minor (mode)
+    # discrimination — and correlate it against Temperley profiles. See the
+    # deep-research addendum in ADR-0004. Falls back to the cens mean if the
+    # richer chroma can't be computed. (chroma_mean above is unchanged and
+    # still feeds the harmonic-similarity criterion, so the catalog stays
+    # consistent.)
+    try:
+        tuning = float(librosa.estimate_tuning(y=wav, sr=sr))
+        y_harmonic = librosa.effects.harmonic(wav, margin=8)
+        key_chroma = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr, tuning=tuning)
+        km = key_chroma.mean(axis=1).astype(np.float64)
+    except Exception:
+        km = chroma_mean.astype(np.float64)
+
+    cm_centered = km - km.mean()
     cm_denom = float(np.sqrt((cm_centered ** 2).sum())) or 1.0
 
     best_r = -1.0
     best_idx = 0
     best_mode = "major"
-    for mode_label, profile in (("major", _KS_MAJOR), ("minor", _KS_MINOR)):
+    for mode_label in ("major", "minor"):
         for shift in range(12):
-            prof = np.roll(profile, shift).astype(np.float64)
-            prof_centered = prof - prof.mean()
-            prof_denom = float(np.sqrt((prof_centered ** 2).sum())) or 1.0
-            r = float((cm_centered * prof_centered).sum() / (cm_denom * prof_denom))
+            r = _ensemble_key_corr(cm_centered, cm_denom, shift, mode_label)
             if r > best_r:
                 best_r = r
                 best_idx = shift
@@ -179,10 +242,7 @@ def compute(wav_mono: np.ndarray, sr: int) -> MirFeatures:
     # single answer (the most common key-detection error — see ADR-0004).
     rel_mode = "major" if best_mode == "minor" else "minor"
     rel_idx = (best_idx + 3) % 12 if best_mode == "minor" else (best_idx - 3) % 12
-    rel_prof = np.roll(_KS_MAJOR if rel_mode == "major" else _KS_MINOR, rel_idx).astype(np.float64)
-    rel_centered = rel_prof - rel_prof.mean()
-    rel_denom = float(np.sqrt((rel_centered ** 2).sum())) or 1.0
-    rel_r = float((cm_centered * rel_centered).sum() / (cm_denom * rel_denom))
+    rel_r = _ensemble_key_corr(cm_centered, cm_denom, rel_idx, rel_mode)
     key_ambiguous = bool((best_r - rel_r) < _RELATIVE_KEY_MARGIN)
     key_display = _spell(best_idx, best_mode)
     key_alt = _spell(rel_idx, rel_mode) if key_ambiguous else ""
