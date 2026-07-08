@@ -232,7 +232,7 @@ export default function ArtistCard({ artist, contextToken = null, queryUrl = nul
           onClick={togglePlay}
           disabled={!artist.previewUrl}
           aria-label={playing ? 'Pause preview' : 'Play preview'}
-          style={{ flex: 'none', width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'var(--color-ink)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ flex: 'none', width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'var(--color-teal)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
           {playing ? (
             <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
@@ -249,7 +249,7 @@ export default function ArtistCard({ artist, contextToken = null, queryUrl = nul
                 height: `${h}%`,
                 minHeight: 3,
                 borderRadius: 2,
-                background: playing ? 'var(--color-teal-deep)' : '#c3ccd1',
+                background: playing ? 'var(--color-teal)' : 'var(--color-faint)',
                 transformOrigin: 'center',
                 animation: playing ? 'dundoEq 0.9s ease-in-out infinite' : 'none',
                 animationDelay: playing ? `${(i % 8) * 0.06}s` : undefined,
@@ -443,7 +443,7 @@ export default function ArtistCard({ artist, contextToken = null, queryUrl = nul
               <div style={{ display: 'flex', gap: 16 }}>
                 {artist.spectro.map((sp) => (
                   <div key={sp.caption} style={{ flex: 1 }}>
-                    <div style={{ height: 92, borderRadius: 10, backgroundColor: '#0E1116', backgroundImage: 'repeating-linear-gradient(90deg, rgba(15,181,166,0.55) 0 2px, transparent 2px 5px), repeating-linear-gradient(0deg, rgba(58,87,214,0.30) 0 2px, transparent 2px 9px)' }} />
+                    <div style={{ height: 92, borderRadius: 10, backgroundColor: '#0E0716', backgroundImage: 'repeating-linear-gradient(90deg, rgba(245,70,138,0.55) 0 2px, transparent 2px 5px), repeating-linear-gradient(0deg, rgba(255,122,61,0.28) 0 2px, transparent 2px 9px)' }} />
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)', marginTop: 8 }}>{sp.caption}</div>
                   </div>
                 ))}

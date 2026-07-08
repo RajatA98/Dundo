@@ -7,7 +7,7 @@ export default function Nav() {
   return (
     <nav
       className="mx-auto flex w-full max-w-[1080px] items-center justify-between"
-      style={{ padding: '22px 28px' }}
+      style={{ padding: '22px 28px', borderBottom: '1px solid var(--color-line)' }}
     >
       <Link
         to="/"

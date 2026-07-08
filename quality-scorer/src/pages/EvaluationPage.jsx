@@ -16,6 +16,39 @@ const GATE_LABELS = {
   openai_error_handling: 'API errors handled gracefully',
 }
 
+// Human labels + display order for the per-case section.
+const CATEGORY_META = {
+  happy_path: { label: 'Valid explanation accepted', order: 0 },
+  hallucinated_citation: { label: 'Made-up fact rejected', order: 1 },
+  low_context: { label: 'Thin evidence gated — no model call', order: 2 },
+  prose_ungrounded_metric: { label: 'Ungrounded number in prose rejected', order: 3 },
+  malformed_output: { label: 'Broken model output rejected', order: 4 },
+  openai_error: { label: 'API failure handled gracefully', order: 5 },
+}
+const prettify = (s) => (s ? s.replace(/_/g, ' ') : s)
+
+/** One narrative-eval case: what it checks + its expected→actual verdict + pass/fail. */
+function CaseRow({ c }) {
+  const pass = c.kind_match && c.reason_match && c.gate_respected
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'var(--color-paper)', border: '1px solid var(--color-line)', borderRadius: 10, padding: '12px 14px' }}>
+      <span style={{ flex: 'none', marginTop: 1, width: 18, height: 18, borderRadius: 99, background: pass ? 'var(--color-teal)' : 'var(--color-fail)', color: '#fff', fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{pass ? '✓' : '✗'}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--color-ink-soft)' }}>{c.description || prettify(c.name)}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 7, fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--color-faint)' }}>
+          <span style={{ padding: '2px 8px', borderRadius: 999, background: 'var(--color-teal-soft)', color: 'var(--color-teal)' }}>{c.mode}</span>
+          <span>
+            {c.expected_kind}
+            {c.actual_kind && c.actual_kind !== c.expected_kind ? ` → ${c.actual_kind}` : ''}
+          </span>
+          {c.expected_reason && <span>· {c.expected_reason}</span>}
+          {c.llm_was_called === false && <span>· no model call</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function EvaluationPage() {
   const [data, setData] = useState(null)
   const [rag, setRag] = useState(null)
@@ -51,6 +84,14 @@ export default function EvaluationPage() {
     { label: 'Recall@3', value: PCT(m?.recall_at_3), note: 'true match in the top three' },
     { label: 'MRR', value: NUM(m?.mrr), note: 'mean reciprocal rank' },
   ]
+
+  const ragCases = rag?.cases || []
+  const groupedCases = Object.entries(
+    ragCases.reduce((acc, c) => {
+      ;(acc[c.category] ||= []).push(c)
+      return acc
+    }, {}),
+  ).sort((a, b) => (CATEGORY_META[a[0]]?.order ?? 99) - (CATEGORY_META[b[0]]?.order ?? 99))
 
   return (
     <section style={{ maxWidth: 940, margin: '0 auto', padding: '64px 28px 80px' }}>
@@ -127,6 +168,45 @@ export default function EvaluationPage() {
                 <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--color-faint)' }}>{PCT(v)}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {groupedCases.length > 0 && (
+        <div style={{ marginBottom: 48 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 8 }}>
+            What we test, case by case
+          </div>
+          <p style={{ fontSize: 14.5, lineHeight: 1.6, color: 'var(--color-muted)', margin: '0 0 20px', maxWidth: '64ch' }}>
+            Every case feeds a fixed model reply through the real validation pipeline. A ✓ means the
+            layer did the right thing — accepted a fully-grounded explanation, or refused one that was
+            hallucinated, malformed, or built on thin evidence. {ragCases.length} cases across{' '}
+            {groupedCases.length} categories; all currently pass.
+          </p>
+          <div style={{ display: 'grid', gap: 22 }}>
+            {groupedCases.map(([cat, cases]) => {
+              const allPass = cases.every((c) => c.kind_match && c.reason_match && c.gate_respected)
+              return (
+                <div key={cat}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--color-ink)' }}>
+                      {CATEGORY_META[cat]?.label || prettify(cat)}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--color-faint)' }}>
+                      {cases.length} {cases.length === 1 ? 'case' : 'cases'}
+                    </span>
+                    <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: allPass ? 'var(--color-teal)' : 'var(--color-fail)' }}>
+                      {allPass ? 'all pass' : 'needs review'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {cases.map((c) => (
+                      <CaseRow key={c.name} c={c} />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

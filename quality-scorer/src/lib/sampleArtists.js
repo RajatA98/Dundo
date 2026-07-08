@@ -14,7 +14,7 @@ export const sampleArtists = [
     location: 'Lisbon',
     similarity: 0.88,
     duration: '0:32',
-    artGrad: 'linear-gradient(140deg,#0c8f86,#3A57D6)',
+    artGrad: 'linear-gradient(140deg,#F5468A,#FF7A3D)',
     narrative:
       'Both sit in a hushed F-minor, around 84 BPM, with a fingerpicked guitar floating over soft tape hiss. Maya leans more acoustic where yours adds a synth pad — but the patience, the room tone, and the way the melody hangs back are unmistakably shared.',
     listenUrl: 'https://mayalev.bandcamp.com',
@@ -42,7 +42,7 @@ export const sampleArtists = [
     location: 'Portland',
     similarity: 0.74,
     duration: '0:41',
-    artGrad: 'linear-gradient(140deg,#3A57D6,#0c8f86)',
+    artGrad: 'linear-gradient(140deg,#7A4FE0,#F5468A)',
     narrative:
       'A wider, more reverberant take on the same idea — long sustained pads and a slow build that never quite resolves. Shares your track’s key center and that sense of drifting, but trades the close-mic intimacy for open space.',
     listenUrl: 'https://freemusicarchive.org/music/hollow-coast',
@@ -57,7 +57,7 @@ export const sampleArtists = [
     location: null,
     similarity: 0.66,
     duration: '0:28',
-    artGrad: 'linear-gradient(140deg,#0FB5A6,#1c8f86)',
+    artGrad: 'linear-gradient(140deg,#FF7A3D,#FFC24B)',
     narrative:
       'Stripped to a single felt piano and breath, Práta finds the same melancholy you landed on. Faster and sparser, but the falling three-note figure at the heart of your track echoes here almost note-for-note.',
     listenUrl: 'https://jamendo.com/artist/prata',

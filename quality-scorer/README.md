@@ -42,7 +42,7 @@ src/
     AboutPage.jsx
 ```
 
-The design tokens live in `tailwind.config.js`. The PiedPiper-era Suno-flare accent tokens (`--suno`, `--suno-soft`, `--suno-deep`) survived the Dundo fork as part of the existing palette but are no longer load-bearing for any single component — they're available as a neutral accent if a future iteration needs them. See `factory/artifacts/_PREPIVOT/CLAUDE_UI_DESIGN_PROMPT.md` for the PiedPiper-era design rules.
+The design tokens live in `src/index.css` (Tailwind v4 `@theme` block) — the dark "sunset" palette: warm near-black canvas, sunset-magenta "find" accent, ember-orange "listen" accent. See `factory/artifacts/CLAUDE_UI_DESIGN_PROMPT.md` for the design direction.
 
 ## Stack
 

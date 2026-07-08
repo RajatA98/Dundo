@@ -1,12 +1,31 @@
 /**
- * Hero — the violet-free, cool teal→indigo signature band (Dundo's one
- * gradient). Tagline locked: "Upload an AI track. Find the indie artists
- * it resonates with." Full-bleed; text constrained to a centered column.
+ * Hero — Dundo's signature: the sunset bloom (night → plum → magenta →
+ * orange → gold) with a soft radial glow, echoing Suno's aurora look.
+ * Tagline locked: "Upload an AI track. Find the indie artists it
+ * resonates with." Full-bleed; text constrained to a centered column.
  */
 export default function Hero() {
   return (
-    <section style={{ background: 'linear-gradient(150deg, #0c8f86, #3A57D6)', padding: '84px 28px 124px' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center', color: '#ffffff' }}>
+    <section
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, #160B22 0%, #5B1E63 34%, #F5468A 64%, #FF7A3D 84%, #FFC24B 100%)',
+        padding: '84px 28px 124px',
+      }}
+    >
+      {/* soft luminescent bloom — the Suno-adjacent glow */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background:
+            'radial-gradient(120% 90% at 78% 8%, rgba(255,194,75,0.45) 0%, rgba(255,122,61,0.18) 34%, transparent 62%), radial-gradient(90% 80% at 12% 100%, rgba(122,79,224,0.40) 0%, transparent 60%)',
+          pointerEvents: 'none',
+        }}
+      />
+      <div style={{ position: 'relative', maxWidth: 720, margin: '0 auto', textAlign: 'center', color: '#FBF3EC' }}>
         <div
           style={{
             fontSize: 12.5,

@@ -111,6 +111,7 @@ def _run_case(case: dict) -> dict:
     return {
         "name": case["name"],
         "category": case["category"],
+        "description": case.get("description"),
         "mode": case["mode"],
         "expected_kind": expected_kind,
         "actual_kind": actual_kind,
@@ -205,6 +206,25 @@ def main() -> int:
     # (citation + fact validation) alongside the retrieval metrics. Read at runtime.
     public_path = REPO_ROOT / "quality-scorer" / "public" / "corpus" / "rag_eval.json"
     public_path.parent.mkdir(parents=True, exist_ok=True)
+    # Per-case rows (trimmed to display-relevant fields) so the /evaluation page can
+    # show *what* each case checks and its expected→actual verdict, not just aggregates.
+    public_case_fields = (
+        "name",
+        "category",
+        "mode",
+        "description",
+        "expected_kind",
+        "actual_kind",
+        "expected_reason",
+        "actual_reason",
+        "kind_match",
+        "reason_match",
+        "gate_respected",
+        "llm_was_called",
+    )
+    public_cases = [
+        {k: row.get(k) for k in public_case_fields} for row in result["rows"]
+    ]
     public_path.write_text(
         json.dumps(
             {
@@ -212,6 +232,7 @@ def main() -> int:
                 "kind_agreement_rate": summary["kind_agreement_rate"],
                 "reason_agreement_rate": summary["reason_agreement_rate"],
                 "baseline_gates": summary["baseline_gates"],
+                "cases": public_cases,
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             },
             indent=2,

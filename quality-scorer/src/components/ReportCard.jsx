@@ -10,10 +10,9 @@ import QualityBadge from './QualityBadge.jsx'
  *
  * Visual contract: ui_mockup_v2_suno_flare.html `article.report` block.
  *
- * The ACRCloud rows that lived here in the PiedPiper era were retired in
- * the Dundo pivot (see factory/artifacts/ACRCLOUD_RETIREMENT_NOTE.md).
- * Dundo's identity is positive-sum discovery, not commercial-second-opinion
- * copyright detection.
+ * The ACRCloud rows that once lived here were retired in the Dundo pivot
+ * (see factory/artifacts/ACRCLOUD_RETIREMENT_NOTE.md). Dundo's identity is
+ * positive-sum discovery, not commercial-second-opinion copyright detection.
  *
  * @param {Object} props
  * @param {Object} props.neighbors - the /neighbors response payload
