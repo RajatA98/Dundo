@@ -17,7 +17,7 @@ export default function DropZone({ onFile, disabled = false }) {
   }
 
   return (
-    <div style={{ maxWidth: 940, margin: '-64px auto 0', padding: '0 28px' }}>
+    <div style={{ maxWidth: 940, margin: '-28px auto 0', padding: '0 28px', position: 'relative' }}>
       <label
         onDragOver={(e) => {
           e.preventDefault()
@@ -34,7 +34,7 @@ export default function DropZone({ onFile, disabled = false }) {
           background: 'var(--color-paper)',
           border: dragging ? '1.5px solid var(--color-teal)' : '1.5px solid var(--color-line)',
           borderRadius: 16,
-          boxShadow: '0 18px 44px -22px rgba(14,17,22,0.22)',
+          boxShadow: '0 26px 60px -24px rgba(0,0,0,0.62)',
           padding: '40px 32px',
           textAlign: 'center',
           cursor: disabled ? 'default' : 'pointer',

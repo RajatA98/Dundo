@@ -9,32 +9,25 @@ export default function Hero() {
     <section
       style={{
         position: 'relative',
-        overflow: 'hidden',
-        background: 'linear-gradient(135deg, #160B22 0%, #5B1E63 34%, #F5468A 64%, #FF7A3D 84%, #FFC24B 100%)',
-        padding: '84px 28px 124px',
+        // All layers live in ONE background stack (top → back) so the paint is
+        // clipped exactly to the section box — the bottom row is solid --color-wash,
+        // leaving no hard seam where the hero meets the dark page.
+        //   1) bottom fade → dissolves everything into the page background
+        //   2,3) soft luminescent blooms — the Suno-adjacent glow
+        //   4) the sunset base (night → plum → magenta → orange → gold)
+        background:
+          'linear-gradient(to bottom, transparent 28%, var(--color-wash) 72%),' +
+          'radial-gradient(120% 90% at 78% 8%, rgba(255,194,75,0.45) 0%, rgba(255,122,61,0.18) 34%, transparent 62%),' +
+          'radial-gradient(90% 80% at 12% 88%, rgba(122,79,224,0.40) 0%, transparent 60%),' +
+          'linear-gradient(135deg, #160B22 0%, #5B1E63 34%, #F5468A 64%, #FF7A3D 84%, #FFC24B 100%)',
+        padding: '84px 28px 64px',
       }}
     >
-      {/* soft luminescent bloom — the Suno-adjacent glow */}
+      {/* full-bleed wash strip straddling the hero's bottom edge — physically
+          overpaints the 1px sub-pixel seam the gradient leaves at the boundary */}
       <div
         aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background:
-            'radial-gradient(120% 90% at 78% 8%, rgba(255,194,75,0.45) 0%, rgba(255,122,61,0.18) 34%, transparent 62%), radial-gradient(90% 80% at 12% 100%, rgba(122,79,224,0.40) 0%, transparent 60%)',
-          pointerEvents: 'none',
-        }}
-      />
-      {/* bottom fade — dissolve the gradient into the page so there's no hard seam
-          where the hero meets the dark body (and behind the floating drop zone) */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'linear-gradient(to bottom, transparent 55%, var(--color-wash) 100%)',
-          pointerEvents: 'none',
-        }}
+        style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 3, background: 'var(--color-wash)', pointerEvents: 'none' }}
       />
       <div style={{ position: 'relative', maxWidth: 720, margin: '0 auto', textAlign: 'center', color: '#FBF3EC' }}>
         <div
