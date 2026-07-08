@@ -25,6 +25,17 @@ export default function Hero() {
           pointerEvents: 'none',
         }}
       />
+      {/* bottom fade — dissolve the gradient into the page so there's no hard seam
+          where the hero meets the dark body (and behind the floating drop zone) */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(to bottom, transparent 55%, var(--color-wash) 100%)',
+          pointerEvents: 'none',
+        }}
+      />
       <div style={{ position: 'relative', maxWidth: 720, margin: '0 auto', textAlign: 'center', color: '#FBF3EC' }}>
         <div
           style={{
