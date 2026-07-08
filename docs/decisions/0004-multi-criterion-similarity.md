@@ -206,7 +206,12 @@ Change (additive, display-only — the winning `key`/`mode` and the similarity
 comparison are unchanged, so no catalog re-ingest is needed):
 - `mir_features.compute` now also returns `key_display` (key-signature-correct
   spelling, e.g. "E♭" not "D♯"), `key_alt` (the relative key), and `key_ambiguous`
-  (true when the relative key is within `_RELATIVE_KEY_MARGIN = 0.10` of the winner).
+  (true when the relative key is within `_RELATIVE_KEY_MARGIN` of the winner).
+  The margin is `0.15`, calibrated against the **live** pipeline sample rate
+  (`ANALYSIS_SR = 22050 Hz`, 60 s cap), where the example scores C minor 0.854 vs
+  E♭ major 0.748 (margin 0.105) and the next unrelated key is 0.30 back. Chroma —
+  hence this margin — is sample-rate sensitive; a native-rate decode gives a
+  smaller margin (~0.04) and a threshold tuned there under-flags in production.
 - `querySummary` forwards these; the "your song's stats" panel shows both keys
   ("C minor / E♭ major") and drops the confidence claim ("relative keys — either
   fits") when ambiguous, instead of a false-confident single key.

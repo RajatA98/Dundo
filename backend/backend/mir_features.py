@@ -52,7 +52,14 @@ _MINOR_NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "G♯", "A", "B
 # winner's raw correlation overstates certainty. When the relative key lands
 # within this correlation margin we flag the call ambiguous and surface both,
 # rather than claiming a confident single key. See ADR-0004.
-_RELATIVE_KEY_MARGIN = 0.10
+#
+# Calibrated on the live pipeline (ANALYSIS_SR = 22050 Hz, 60 s cap): a known
+# E♭-major upload scores C minor 0.854 vs its relative E♭ major 0.748 — a 0.105
+# margin — while the next unrelated key sits 0.30 back. 0.15 catches the relative
+# near-tie with headroom without reaching non-relative keys. (Chroma, and thus
+# this margin, is sample-rate sensitive — calibrate against ANALYSIS_SR, not
+# a native-rate decode.)
+_RELATIVE_KEY_MARGIN = 0.15
 
 
 def _spell(idx: int, mode: str) -> str:
