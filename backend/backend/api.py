@@ -502,6 +502,9 @@ def _build_query_summary(pipeline: dict, tag_profile: dict[str, list[dict]]) -> 
         summary["key"] = getattr(mir, "key", None)
         summary["mode"] = getattr(mir, "mode", None)
         summary["keyConfidence"] = round(float(getattr(mir, "key_confidence", 0.0) or 0.0), 2)
+        summary["keyDisplay"] = getattr(mir, "key_display", None) or None
+        summary["keyAlt"] = getattr(mir, "key_alt", None) or None
+        summary["keyAmbiguous"] = bool(getattr(mir, "key_ambiguous", False))
     return summary
 
 

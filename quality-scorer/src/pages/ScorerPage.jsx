@@ -135,7 +135,8 @@ function StickyTrackBar({ docked, playing, progress, stats, onToggle }) {
   const energyFill = ENERGY_FILL[stats?.energyBand] || 0
   const bits = []
   if (stats?.tempoBpm) bits.push(`≈ ${stats.tempoBpm} BPM`)
-  if (stats?.key) bits.push(`${stats.key} ${stats.mode || ''}`.trim())
+  const keyLabel = stats?.keyDisplay || (stats?.key ? `${stats.key} ${stats.mode || ''}`.trim() : null)
+  if (keyLabel) bits.push(stats?.keyAmbiguous && stats?.keyAlt ? `${keyLabel} / ${stats.keyAlt}` : keyLabel)
 
   return (
     <div
@@ -219,6 +220,11 @@ function SongStats({ stats }) {
   const genres = (tags.genre || []).slice(0, 2).map((t) => cap(t.label)).join(', ')
   const conf = keyConfLabel(stats.keyConfidence)
   const energyFill = ENERGY_FILL[stats.energyBand] || 0
+  const keyPrimary = stats.keyDisplay || (stats.key ? `${stats.key} ${stats.mode || ''}`.trim() : null)
+  // Relative major/minor share the same notes, so the detector often can't tell
+  // them apart — when it's a near-tie, show both and skip the confidence claim.
+  const keyValue = stats.keyAmbiguous && stats.keyAlt ? `${keyPrimary} / ${stats.keyAlt}` : keyPrimary
+  const keySub = stats.keyAmbiguous ? 'relative keys — either fits' : conf ? `${conf} confidence` : null
 
   return (
     <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--color-line)' }}>
@@ -227,11 +233,7 @@ function SongStats({ stats }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 20 }}>
         <Stat label="Tempo" value={stats.tempoBpm ? `≈ ${stats.tempoBpm} BPM` : null} />
-        <Stat
-          label="Key"
-          value={stats.key ? `${stats.key} ${stats.mode || ''}`.trim() : null}
-          sub={conf ? `${conf} confidence` : null}
-        />
+        <Stat label="Key" value={keyValue} sub={keySub} />
         <Stat label="Length" value={fmtDuration(stats.durationSec)} />
         {stats.energyBand && (
           <Stat

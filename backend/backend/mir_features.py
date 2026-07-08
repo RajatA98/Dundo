@@ -40,6 +40,26 @@ _KS_MINOR = np.array(
 )
 _PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
+# Display spelling by key signature — flats/sharps chosen the way a musician
+# would write the key (e.g. E♭ major, not D♯ major). The raw `key` field keeps
+# the ASCII sharp spelling above so the similarity comparison stays exact; these
+# names are for the "your song's stats" display only.
+_MAJOR_NAMES = ["C", "D♭", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"]
+_MINOR_NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "G♯", "A", "B♭", "B"]
+
+# A relative major/minor pair (e.g. C minor ↔ E♭ major) shares the same pitch
+# classes, so mean-chroma Krumhansl-Schmuckler routinely near-ties them and the
+# winner's raw correlation overstates certainty. When the relative key lands
+# within this correlation margin we flag the call ambiguous and surface both,
+# rather than claiming a confident single key. See ADR-0004.
+_RELATIVE_KEY_MARGIN = 0.10
+
+
+def _spell(idx: int, mode: str) -> str:
+    """Key-signature-correct display name, e.g. (3, 'major') -> 'E♭ major'."""
+    names = _MINOR_NAMES if mode == "minor" else _MAJOR_NAMES
+    return f"{names[idx % 12]} {mode}"
+
 
 @dataclass
 class MirFeatures:
@@ -55,6 +75,10 @@ class MirFeatures:
     key_confidence: float  # 0-1 — Krumhansl-Schmuckler correlation strength
     chroma_mean: list   # 12-d, float, sums approximately to 1.0 (probability over pitch classes)
     timbre_mean: list   # 26-d (13 MFCC means + 13 MFCC stddevs), float
+    # Display-only, additive (defaults keep old catalog dicts loading):
+    key_display: str = ""      # pretty, key-signature-correct spelling, e.g. "C minor"
+    key_alt: str = ""          # relative major/minor, shown when it's a near-tie
+    key_ambiguous: bool = False  # winner and its relative key are within margin
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -68,6 +92,9 @@ class MirFeatures:
             key_confidence=float(payload.get("key_confidence", 0.0)),
             chroma_mean=[float(v) for v in payload["chroma_mean"]],
             timbre_mean=[float(v) for v in payload["timbre_mean"]],
+            key_display=str(payload.get("key_display", "")),
+            key_alt=str(payload.get("key_alt", "")),
+            key_ambiguous=bool(payload.get("key_ambiguous", False)),
         )
 
 
@@ -139,6 +166,20 @@ def compute(wav_mono: np.ndarray, sr: int) -> MirFeatures:
     # Pearson correlation ranges [-1, 1]; map to [0, 1] confidence.
     key_confidence = float(max(0.0, min(1.0, (best_r + 1.0) / 2.0)))
 
+    # Relative-key ambiguity: C minor's relative is E♭ major (tonic +3), a major
+    # key's relative minor is at tonic -3. Correlate that one profile and, if it's
+    # within the margin of the winner, surface both keys instead of a false-confident
+    # single answer (the most common key-detection error — see ADR-0004).
+    rel_mode = "major" if best_mode == "minor" else "minor"
+    rel_idx = (best_idx + 3) % 12 if best_mode == "minor" else (best_idx - 3) % 12
+    rel_prof = np.roll(_KS_MAJOR if rel_mode == "major" else _KS_MINOR, rel_idx).astype(np.float64)
+    rel_centered = rel_prof - rel_prof.mean()
+    rel_denom = float(np.sqrt((rel_centered ** 2).sum())) or 1.0
+    rel_r = float((cm_centered * rel_centered).sum() / (cm_denom * rel_denom))
+    key_ambiguous = bool((best_r - rel_r) < _RELATIVE_KEY_MARGIN)
+    key_display = _spell(best_idx, best_mode)
+    key_alt = _spell(rel_idx, rel_mode) if key_ambiguous else ""
+
     # --- MFCC (timbre fingerprint) -------------------------------------
     # 13 MFCC coefficients (standard; the 0th captures overall energy and
     # is sometimes dropped, but we keep it because the mean+std combination
@@ -155,4 +196,7 @@ def compute(wav_mono: np.ndarray, sr: int) -> MirFeatures:
         key_confidence=key_confidence,
         chroma_mean=[float(v) for v in chroma_mean],
         timbre_mean=[float(v) for v in timbre_mean],
+        key_display=key_display,
+        key_alt=key_alt,
+        key_ambiguous=key_ambiguous,
     )

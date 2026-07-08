@@ -193,6 +193,24 @@ A follow-up could add a small criteria-side eval: for each self-retrieval test, 
 
 ---
 
+## Addendum (2026-07-08): relative-key honesty in the key/mode readout
+
+The mean-chroma Krumhansl-Schmuckler key detector reports the single best-correlating
+key plus a confidence that is just the winner's raw correlation. This overstates
+certainty for **relative major/minor pairs** (e.g. C minor ↔ E♭ major), which share
+the same pitch classes and therefore near-tie — the most common key-detection error.
+A user-uploaded E♭-major track was confidently labelled "C minor · high confidence"
+(winner r=0.79 vs relative r=0.75, a 0.043 margin).
+
+Change (additive, display-only — the winning `key`/`mode` and the similarity
+comparison are unchanged, so no catalog re-ingest is needed):
+- `mir_features.compute` now also returns `key_display` (key-signature-correct
+  spelling, e.g. "E♭" not "D♯"), `key_alt` (the relative key), and `key_ambiguous`
+  (true when the relative key is within `_RELATIVE_KEY_MARGIN = 0.10` of the winner).
+- `querySummary` forwards these; the "your song's stats" panel shows both keys
+  ("C minor / E♭ major") and drops the confidence claim ("relative keys — either
+  fits") when ambiguous, instead of a false-confident single key.
+
 ## References
 
 - [ADR-0001](0001-similarity-calibration.md) — calibration mechanics (percentile + label + querySpecificity). This ADR drops the percentile from user-facing display but keeps the calibrated label.
